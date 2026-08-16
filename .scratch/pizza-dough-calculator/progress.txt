@@ -61,3 +61,72 @@ Notes for the next iteration
 - No web app manifest or service worker yet — that is Issue 09. app.html already
   carries the iOS home-screen meta tags.
 - Untracked/modified files under .scratch/ralph/ are not mine and were left alone.
+
+
+Iteration 2 — 2026-08-16 — Issue 02: Pick a Style, see the weights  [DONE]
+--------------------------------------------------------------------------
+
+What I did
+- Built the domain module in src/lib/dough/: styles.ts (five Presets), solve.ts
+  (the Anchor arithmetic and rounding), index.ts (the public barrel), and
+  solve.test.ts. Added `percentages` to SolvedRecipe and `freshYeastPercent` to
+  Style, both required by the ticket.
+- Built the two screens: StylePicker.svelte lists the five Styles with names,
+  blurbs and default Batch; Workbench.svelte holds the solved weights in a
+  sticky header with Baker's Percentages, plus Batch steppers and the Style's
+  bake string. +page.svelte switches between them.
+- Wrote src/lib/format.ts for gram and percentage display.
+- 15 tests, written red-green one slice at a time against solve() — the seam the
+  PRD pre-agreed. Coverage: the Anchor, Hydration trading flour for water, the
+  summing rule across all five Styles, four awkward Batch sizes, and the
+  per-ingredient rounding units.
+
+Key decisions and reasoning
+- FLOUR CARRIES A TENTH OF A GRAM. Two acceptance criteria contradict each
+  other: flour cannot be whole and also absorb the rounding drift, because the
+  tenths the small ingredients round away have to land somewhere. Neapolitan:
+  water 375 + salt 16.9 + yeast 4.5 leaves flour at 603.6; rounding it to 604
+  makes four 250 g balls read 1000.4 g. Kept exact summing, per the ticket's own
+  ranking ("a column that doesn't add up ... reads as a bug"). Pinned by a named
+  test, commented at the rounding site, and written up in the issue file. The
+  alternative — put the tenth on water — is a one-line change if the display
+  work later prefers it. Either way one of the two rules gives.
+- Placeholder yeast percentages are not arbitrary. Each is what the ADR-0002
+  ferment model (6 / activity) produces for that Preset's own schedule, so the
+  numbers will not jump when Issue 04 replaces the literals with the model.
+- Oil and sugar rows are gated on the *Preset's* value, not the live Recipe's,
+  so zeroing the oil on a New York in Issue 03 does not make the control vanish.
+- Leavening in the solver's denominator is the yeast type the user actually
+  weighs out (dry = fresh / 3), not the stored fresh-yeast figure — otherwise a
+  dry-yeast dough would be short on flour.
+- solve() does not consult recipe.lock yet; commented as such. Ticket 02
+  explicitly defers the ferment model, so the lock is inert machinery for now.
+- Batch is adjusted with steppers, not typed entry. The shared slider with
+  tappable numeric entry is Issue 03's component and every adjustable value
+  should use it rather than growing a one-off here first.
+
+Files changed
+  A  src/lib/dough/{styles,solve,index}.ts, src/lib/dough/solve.test.ts
+  A  src/lib/format.ts
+  A  src/lib/components/{StylePicker,Workbench}.svelte
+  M  src/lib/dough/types.ts (Style.freshYeastPercent, SolvedRecipe.percentages)
+  M  src/routes/+page.svelte (landing card -> the two screens)
+
+Verification
+  pnpm test:unit  15 passed
+  pnpm check      0 errors, 0 warnings
+  pnpm lint       clean
+  pnpm build      ok
+  Reviewed on both axes (standards + spec) before committing; the flour-rounding
+  conflict above is the only finding not simply fixed.
+
+Notes for the next iteration
+- Next up: Issue 03 — adjust the Recipe freely. That is the shared slider plus
+  tappable numeric entry, used for Hydration, salt, oil and sugar. Workbench.svelte
+  is where it lands; the sticky header already re-solves on any Recipe mutation.
+- Recipe state lives as a plain $state object in +page.svelte and is mutated in
+  place by Workbench. Persistence (Issue 08) will want to wrap that.
+- The two review sub-agents both flagged the fresh/dry ternary appearing in both
+  solve.ts and Workbench.svelte. Two sites is not yet worth a helper; if Issue 05
+  adds a third, extract a yeast label/conversion helper then.
+- Still untouched and not mine: .scratch/ralph/ralph-once.sh.
