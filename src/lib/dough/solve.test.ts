@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { solve } from "./solve";
+import { solve, withLock } from "./solve";
 import { STYLES, recipeFromStyle, styleById } from "./styles";
 import { FRESH_PER_DRY, type SolvedRecipe } from "./types";
 
@@ -144,6 +144,92 @@ describe("the ferment model", () => {
 
 		const saved = (later: typeof recipe) => solve(recipe).yeast - solve(later).yeast;
 		expect(saved(anotherColdHour)).toBeLessThan(saved(anotherRoomHour));
+	});
+});
+
+describe("the Lock", () => {
+	it("derives the Leavening from the Proof Schedule while the schedule is locked", () => {
+		const recipe = recipeFromStyle(styleById("neapolitan"));
+		const longer = {
+			...recipe,
+			schedule: { ...recipe.schedule, cold: { hours: 48, celsius: 4 } },
+		};
+
+		// The stored Leavening is stale on purpose: the locked side is the one that wins.
+		const solved = solve({ ...longer, freshYeastPercent: 0.05 });
+
+		expect(solved.schedule).toEqual(longer.schedule);
+		expect(solved.yeastPercent).toBeLessThan(0.05);
+	});
+
+	it("derives the Cold Proof from the Leavening while the Leavening is locked", () => {
+		const preset = recipeFromStyle(styleById("neapolitan"));
+		const locked = withLock(preset, "leavening");
+
+		// Twice the yeast on the same dough: it is ready in less time, and the fridge
+		// is where the time comes off.
+		const impatient = solve({ ...locked, freshYeastPercent: locked.freshYeastPercent * 2 });
+
+		expect(impatient.schedule.cold.hours).toBeLessThan(preset.schedule.cold.hours);
+		expect(impatient.schedule.bulk).toEqual(preset.schedule.bulk);
+		expect(impatient.schedule.warmUp).toEqual(preset.schedule.warmUp);
+	});
+
+	it("moves the Cold Proof the other way when the Leavening is cut", () => {
+		const locked = withLock(recipeFromStyle(styleById("new-york")), "leavening");
+		const scarce = solve({ ...locked, freshYeastPercent: locked.freshYeastPercent / 2 });
+
+		expect(scarce.schedule.cold.hours).toBeGreaterThan(48);
+	});
+
+	it("stretches the Bulk instead on a Style with no Cold Proof", () => {
+		const preset = recipeFromStyle(styleById("same-day"));
+		const locked = withLock(preset, "leavening");
+		const scarce = solve({ ...locked, freshYeastPercent: locked.freshYeastPercent / 2 });
+
+		expect(scarce.schedule.bulk.hours).toBeGreaterThan(preset.schedule.bulk.hours);
+		expect(scarce.schedule.cold.hours).toBe(0);
+	});
+
+	it.each([...STYLES])("round-trips $name through both Locks", (style) => {
+		const preset = recipeFromStyle(style);
+		const byLeavening = withLock(preset, "leavening");
+		const backToSchedule = withLock(byLeavening, "schedule");
+
+		// Locking the Leavening takes the figure the schedule was already asking for, so
+		// the schedule it derives is the one the baker started with, and the Leavening it
+		// hands back is unchanged.
+		expect(solve(byLeavening).schedule.bulk.hours).toBeCloseTo(preset.schedule.bulk.hours, 6);
+		expect(solve(byLeavening).schedule.cold.hours).toBeCloseTo(preset.schedule.cold.hours, 6);
+		expect(solve(backToSchedule).yeast).toBe(solve(preset).yeast);
+	});
+
+	// The point of the Lock: a combination that cannot work is unreachable. Ask for a
+	// spoonful of yeast on a 24-hour cold proof and the fridge time goes away, rather
+	// than the app computing a negative duration and reporting a dough that blew out.
+	it("drives the Elastic Stage to zero rather than negative when there is too much yeast", () => {
+		const locked = withLock(recipeFromStyle(styleById("neapolitan")), "leavening");
+		const drowned = solve({ ...locked, freshYeastPercent: 0.05 });
+
+		expect(drowned.schedule.cold.hours).toBe(0);
+		expect(drowned.schedule.bulk).toEqual(locked.schedule.bulk);
+	});
+
+	it("names the Cold Proof as Elastic when there is one and the Bulk when there is not", () => {
+		expect(solve(recipeFromStyle(styleById("neapolitan"))).elasticStage).toBe("cold");
+		expect(solve(recipeFromStyle(styleById("same-day"))).elasticStage).toBe("bulk");
+	});
+
+	// Flipping the Lock must not move the dough under the baker's hands: whichever side
+	// becomes derived is first written with what was on screen a moment ago.
+	it("carries the values across when the Lock flips", () => {
+		const edited = recipeFromStyle(styleById("sheet-pan"));
+		edited.schedule.cold.hours = 36;
+
+		const locked = withLock(edited, "leavening");
+
+		expect(locked.freshYeastPercent).toBeCloseTo(solve(edited).yeastPercent * FRESH_PER_DRY, 9);
+		expect(solve(locked).schedule.cold.hours).toBeCloseTo(36, 6);
 	});
 });
 

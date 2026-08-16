@@ -32,6 +32,12 @@ export interface ProofSchedule {
  */
 export type Lock = "schedule" | "leavening";
 
+/**
+ * The Stage that gives way when the Leavening is locked: the Cold Proof when the
+ * Recipe has one, otherwise the Bulk. See ADR-0003.
+ */
+export type ElasticStage = "bulk" | "cold";
+
 /** Everything except flour, as a Baker's Percentage of flour weight. */
 export interface Percentages {
 	hydration: number;
@@ -87,5 +93,8 @@ export interface SolvedRecipe {
 	/** The Baker's Percentages the weights above were derived from. */
 	percentages: Percentages;
 	totalGrams: number;
+	/** The Proof Schedule the dough actually gets: derived when the Leavening is locked. */
 	schedule: ProofSchedule;
+	/** Which Stage the Leavening moves, so the screen can say so. */
+	elasticStage: ElasticStage;
 }

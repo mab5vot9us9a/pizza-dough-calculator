@@ -6,4 +6,5 @@
  */
 export * from "./types";
 export { STYLES, recipeFromStyle, styleById } from "./styles";
-export { solve } from "./solve";
+export { solve, withLock } from "./solve";
+export { asFreshPercent, inYeastType } from "./yeast";

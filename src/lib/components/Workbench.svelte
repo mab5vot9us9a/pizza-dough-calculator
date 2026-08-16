@@ -1,9 +1,20 @@
 <script lang="ts">
 	import AdjustableValue from "$lib/components/AdjustableValue.svelte";
-	import { type Percentages, type Recipe, type YeastType, solve, styleById } from "$lib/dough";
+	import {
+		type Lock,
+		type Percentages,
+		type ProofSchedule,
+		type Recipe,
+		type YeastType,
+		asFreshPercent,
+		inYeastType,
+		solve,
+		styleById,
+		withLock,
+	} from "$lib/dough";
 	import { formatGrams, formatHours, formatPercent } from "$lib/format";
 
-	import { ChevronLeft, Minus, Plus } from "@lucide/svelte";
+	import { ChevronLeft, Lock as LockIcon, Minus, Plus } from "@lucide/svelte";
 
 	// `recipe` is the parent's `$state` object; mutating it here is what re-solves.
 	let { recipe, onback }: { recipe: Recipe; onback: () => void } = $props();
@@ -72,23 +83,78 @@
 	const controls = $derived(CONTROLS.filter(({ key }) => presetUses(key)));
 
 	/**
+	 * The Stages, in the order the dough passes through them.
+	 *
+	 * Every one of them keeps its control at all times — an absent Stage is one the
+	 * user can still reach for, and a control that comes and goes is worse than one
+	 * reading zero.
+	 */
+	const DURATIONS: { key: keyof ProofSchedule; label: string; max: number; step: number }[] = [
+		{ key: "bulk", label: "Bulk", max: 24, step: 0.5 },
+		{ key: "cold", label: "Cold proof", max: 96, step: 1 },
+		{ key: "warmUp", label: "Warm-up", max: 8, step: 0.5 },
+	];
+
+	/**
 	 * The Proof Schedule as the baker walks it. A Stage of no hours is absent from the
 	 * walk-through, which is how the Same-day Style reads correctly with no Cold Proof
-	 * and no Warm-up. Its control stays put — an absent Stage is one the user can still
-	 * reach for, and a control that comes and goes is worse than one reading zero.
+	 * and no Warm-up.
+	 *
+	 * Read off the solved schedule, not the stored one: with the Leavening locked, the
+	 * Elastic Stage's duration is an answer rather than an input.
 	 */
 	const stages = $derived(
-		[
-			{ name: "Bulk", stage: recipe.schedule.bulk },
-			{ name: "Cold proof", stage: recipe.schedule.cold },
-			{ name: "Warm-up", stage: recipe.schedule.warmUp },
-		].filter(({ stage }) => stage.hours > 0)
+		DURATIONS.map(({ key, label }) => ({ key, label, stage: solved.schedule[key] })).filter(
+			({ stage }) => stage.hours > 0
+		)
 	);
 
 	const YEAST_TYPES: { value: YeastType; label: string }[] = [
 		{ value: "fresh", label: "Fresh" },
 		{ value: "dry", label: "Dry" },
 	];
+
+	/**
+	 * Which end of the Leavening/Proof Schedule relationship the user is driving
+	 * (ADR-0003). The other end is solved for, and its control gives way to a readout,
+	 * so there is never a number on screen the app is about to overwrite.
+	 */
+	const LOCKS: { value: Lock; label: string }[] = [
+		{ value: "schedule", label: "Proof schedule" },
+		{ value: "leavening", label: "Yeast" },
+	];
+
+	const leaveningLocked = $derived(recipe.lock === "leavening");
+
+	/** The Stage the Leavening is currently moving, named the way the copy says it. */
+	const elasticLabel = $derived(
+		DURATIONS.find(({ key }) => key === solved.elasticStage)!.label.toLowerCase()
+	);
+
+	function setLock(lock: Lock) {
+		// Whichever side is about to become derived is seeded with what is on screen now,
+		// so flipping the Lock changes nothing until the user moves something.
+		const next = withLock(recipe, lock);
+		recipe.schedule = next.schedule;
+		recipe.freshYeastPercent = next.freshYeastPercent;
+		recipe.lock = next.lock;
+	}
+
+	/**
+	 * Banks what the Elastic Stage currently reads before the schedule changes around it.
+	 *
+	 * Which Stage is Elastic depends on whether there is a Cold Proof, so raising a
+	 * zeroed one hands the role over — and the Stage handing it back becomes an input
+	 * again. Without this it would come back holding the number it had before the Lock
+	 * rather than the one that was on screen a moment ago.
+	 */
+	function setStageHours(key: keyof ProofSchedule, hours: number) {
+		if (leaveningLocked) {
+			const elastic = solved.elasticStage;
+			recipe.schedule[elastic].hours = solved.schedule[elastic].hours;
+		}
+		recipe.schedule[key].hours = hours;
+	}
 
 	/** Batch numbers are what the user promised themselves; keep them sane, not clamped hard. */
 	function stepCount(by: number) {
@@ -197,16 +263,38 @@
 			</div>
 		</section>
 
-		<section class="flex flex-col gap-3">
-			<h2 class="text-ink-muted text-sm font-semibold tracking-wide uppercase">Yeast</h2>
+		<!--
+			The locked side's counterpart: a value the app is solving for, shown where its
+			control would otherwise be so the row does not jump when the Lock flips.
+		-->
+		{#snippet solvedValue(label: string, reading: string)}
+			<div class="flex items-center justify-between gap-3">
+				<span class="text-ink-muted flex items-center gap-1.5 font-medium">
+					<LockIcon class="size-4" aria-hidden="true" />
+					{label}
+				</span>
+				<span
+					class="border-line bg-sunken text-ink-muted w-24 rounded-xl border px-3 py-2 text-right text-lg font-semibold"
+					data-numeric
+				>
+					{reading}
+				</span>
+			</div>
+		{/snippet}
 
+		{#snippet segmented<T>(
+			group: string,
+			options: { value: T; label: string }[],
+			current: T,
+			choose: (value: T) => void
+		)}
 			<div
 				class="border-line bg-raised flex gap-2 rounded-2xl border p-2"
 				role="radiogroup"
-				aria-label="Yeast type"
+				aria-label={group}
 			>
-				{#each YEAST_TYPES as option (option.value)}
-					{@const selected = recipe.yeastType === option.value}
+				{#each options as option (option.value)}
+					{@const selected = current === option.value}
 					<button
 						type="button"
 						role="radio"
@@ -214,11 +302,52 @@
 						class="flex-1 rounded-xl px-4 font-medium {selected
 							? 'bg-accent text-accent-ink'
 							: 'text-ink-muted'}"
-						onclick={() => (recipe.yeastType = option.value)}
+						onclick={() => choose(option.value)}
 					>
 						{option.label}
 					</button>
 				{/each}
+			</div>
+		{/snippet}
+
+		<section class="flex flex-col gap-3">
+			<h2 class="text-ink-muted text-sm font-semibold tracking-wide uppercase">Locked</h2>
+
+			{@render segmented("What stays put", LOCKS, recipe.lock, setLock)}
+
+			<p class="text-ink-muted px-1 text-sm">
+				{leaveningLocked
+					? `You set the yeast; the ${elasticLabel} adjusts to suit it.`
+					: "You set the proof schedule; the yeast quantity adjusts to suit it."}
+			</p>
+		</section>
+
+		<section class="flex flex-col gap-3">
+			<h2 class="text-ink-muted text-sm font-semibold tracking-wide uppercase">Yeast</h2>
+
+			{@render segmented("Yeast type", YEAST_TYPES, recipe.yeastType, (value) => {
+				recipe.yeastType = value;
+			})}
+
+			<div class="border-line bg-raised flex flex-col gap-5 rounded-2xl border p-4">
+				{#if leaveningLocked}
+					<AdjustableValue
+						label="Quantity"
+						min={0.05}
+						max={5}
+						step={0.05}
+						unit="%"
+						bind:value={
+							() => inYeastType(recipe.freshYeastPercent, recipe.yeastType) * 100,
+							(percent) =>
+								(recipe.freshYeastPercent = asFreshPercent(percent / 100, recipe.yeastType))
+						}
+					/>
+				{:else}
+					<!-- The same field either way, so the same unit either way: the grams are
+					     already in the header, a step away. -->
+					{@render solvedValue("Quantity", formatPercent(solved.yeastPercent))}
+				{/if}
 			</div>
 		</section>
 
@@ -226,9 +355,9 @@
 			<h2 class="text-ink-muted text-sm font-semibold tracking-wide uppercase">Proof</h2>
 
 			<ol class="border-line bg-raised flex flex-col gap-3 rounded-2xl border p-4">
-				{#each stages as entry (entry.name)}
+				{#each stages as entry (entry.key)}
 					<li class="flex items-baseline justify-between gap-3">
-						<span class="font-medium">{entry.name}</span>
+						<span class="font-medium">{entry.label}</span>
 						<span class="text-ink-muted text-sm" data-numeric>
 							{formatHours(entry.stage.hours)} at {entry.stage.celsius} °C
 						</span>
@@ -241,30 +370,24 @@
 			</ol>
 
 			<div class="border-line bg-raised flex flex-col gap-5 rounded-2xl border p-4">
-				<AdjustableValue
-					label="Bulk"
-					min={0}
-					max={24}
-					step={0.5}
-					unit=" h"
-					bind:value={recipe.schedule.bulk.hours}
-				/>
-				<AdjustableValue
-					label="Cold proof"
-					min={0}
-					max={96}
-					step={1}
-					unit=" h"
-					bind:value={recipe.schedule.cold.hours}
-				/>
-				<AdjustableValue
-					label="Warm-up"
-					min={0}
-					max={8}
-					step={0.5}
-					unit=" h"
-					bind:value={recipe.schedule.warmUp.hours}
-				/>
+				{#each DURATIONS as duration (duration.key)}
+					{#if leaveningLocked && duration.key === solved.elasticStage}
+						<!-- The Elastic Stage: with the Leavening locked, this is what gives way. -->
+						{@render solvedValue(duration.label, formatHours(solved.schedule[duration.key].hours))}
+					{:else}
+						<AdjustableValue
+							label={duration.label}
+							min={0}
+							max={duration.max}
+							step={duration.step}
+							unit=" h"
+							bind:value={
+								() => recipe.schedule[duration.key].hours,
+								(hours) => setStageHours(duration.key, hours)
+							}
+						/>
+					{/if}
+				{/each}
 
 				<!--
 					One room temperature, not two: the Bulk and the Warm-up both happen on the

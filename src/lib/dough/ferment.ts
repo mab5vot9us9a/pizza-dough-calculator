@@ -1,4 +1,4 @@
-import type { ProofSchedule, Stage } from "./types";
+import type { ElasticStage, ProofSchedule, Stage } from "./types";
 
 /**
  * The ferment model: how much yeast a Proof Schedule asks for.
@@ -30,8 +30,9 @@ const TARGET_ACTIVITY = 6 / 100;
  * A Stage of zero hours contributes zero. That is the whole of "a Stage with no
  * duration is absent" — it needs no special case anywhere.
  */
-const activityOfStage = ({ hours, celsius }: Stage) =>
-	hours * Q10 ** ((celsius - REFERENCE_CELSIUS) / 10);
+const rateAt = (celsius: number) => Q10 ** ((celsius - REFERENCE_CELSIUS) / 10);
+
+const activityOfStage = ({ hours, celsius }: Stage) => hours * rateAt(celsius);
 
 /** The Activity a whole Proof Schedule delivers. */
 const activityOf = (schedule: ProofSchedule) =>
@@ -49,4 +50,39 @@ const activityOf = (schedule: ProofSchedule) =>
 export function leaveningFor(schedule: ProofSchedule): number {
 	const activity = activityOf(schedule);
 	return activity > 0 ? TARGET_ACTIVITY / activity : 0;
+}
+
+/**
+ * Which Stage gives way when the Leavening is the locked side.
+ *
+ * Running the model backwards is underdetermined with more than one Stage, so one
+ * of them absorbs the whole change (ADR-0003). It is the Cold Proof, which is where
+ * the hours are — except on a Style that has none, where it is the Bulk.
+ */
+export function elasticStageOf(schedule: ProofSchedule): ElasticStage {
+	return schedule.cold.hours > 0 ? "cold" : "bulk";
+}
+
+/**
+ * The Proof Schedule a given Leavening asks for: the same schedule with the Elastic
+ * Stage lengthened or shortened until the two sides of the model agree again.
+ *
+ * The Elastic Stage never goes negative. A Leavening high enough to over-ferment the
+ * dough before the fridge is even reached takes that Stage to zero and stops there —
+ * the app cannot un-ferment a dough, so the combination is simply out of reach.
+ *
+ * With no yeast at all there is no schedule to solve for — no duration ferments a
+ * dough that has nothing in it — so the schedule is handed back untouched.
+ */
+export function scheduleFor(schedule: ProofSchedule, freshYeastPercent: number): ProofSchedule {
+	if (freshYeastPercent <= 0) return schedule;
+
+	const elastic = elasticStageOf(schedule);
+	const stage = schedule[elastic];
+
+	const required = TARGET_ACTIVITY / freshYeastPercent;
+	const fromTheOthers = activityOf(schedule) - activityOfStage(stage);
+	const hours = Math.max(0, (required - fromTheOthers) / rateAt(stage.celsius));
+
+	return { ...schedule, [elastic]: { ...stage, hours } };
 }
