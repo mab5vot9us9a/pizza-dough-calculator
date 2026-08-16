@@ -1,6 +1,6 @@
 # Clear the scaffold
 
-Status: ready-for-agent
+Status: resolved
 Type: task
 Blocked by: None — can start immediately
 
@@ -21,12 +21,30 @@ page.
 
 ## Acceptance criteria
 
-- [ ] The scaffold's demo routes and example spec are deleted, along with any assets only
+- [x] The scaffold's demo routes and example spec are deleted, along with any assets only
       they referenced.
-- [ ] The root layout applies the base typography, colour and spacing the app will use, sized
+- [x] The root layout applies the base typography, colour and spacing the app will use, sized
       for a phone held one-handed, with generous tap targets as the default.
-- [ ] The viewport and theme metadata suit a full-screen mobile app.
-- [ ] The app builds as a prerendered static site — the adapter swap from ADR-0006 is already
+- [x] The viewport and theme metadata suit a full-screen mobile app.
+- [x] The app builds as a prerendered static site — the adapter swap from ADR-0006 is already
       committed, so this ticket confirms prerendering is switched on and `pnpm build`
       succeeds.
-- [ ] `pnpm check`, `pnpm lint` and `pnpm test:unit` all pass.
+- [x] `pnpm check`, `pnpm lint` and `pnpm test:unit` all pass.
+
+## Comments
+
+Resolved in `5a632c8`.
+
+Two things the ticket did not anticipate:
+
+- The ADR-0006 adapter swap was only half committed. `package.json` carried
+  `@sveltejs/adapter-static`, but `vite.config.ts` still imported `@sveltejs/adapter-node`
+  (this repo has no `svelte.config.js` — SvelteKit config lives in the `sveltekit()` plugin
+  options). Fixed here, along with `src/routes/+layout.ts` switching prerendering on.
+- `pnpm lint` was already failing on the committed docs and ADRs, which were not
+  prettier-clean. Ran a one-off `pnpm format` over the repo so the gate is green from here.
+
+Also removed: Playwright's config, dependency and scripts (out of scope per the PRD), the
+`$lib/index.ts` placeholder, and the scaffold README. `test:unit` is now
+`vitest --run --passWithNoTests` so it terminates while the suite is empty;
+`test:unit:watch` keeps watch mode.

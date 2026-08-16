@@ -1,0 +1,63 @@
+Pizza Dough Calculator — v1 · progress log
+==========================================
+
+Iteration 1 — 2026-08-16 — Issue 01: Clear the scaffold  [DONE]
+---------------------------------------------------------------
+
+What I did
+- Deleted the SvelteKit scaffold: src/routes/demo/**, src/lib/vitest-examples/**,
+  src/lib/index.ts, playwright.config.ts. Dropped @playwright/test and the test:e2e
+  script (PRD puts Playwright out of scope).
+- Rewrote README.md — it was still the generic `sv` scaffold text.
+- Finished the ADR-0006 adapter swap. vite.config.ts still imported
+  @sveltejs/adapter-node even though package.json already carried adapter-static;
+  the build could not have worked. Added src/routes/+layout.ts with
+  `prerender = true`, so `pnpm build` now writes a static site to ./build.
+- Put the mobile-first foundations in src/routes/layout.css and src/app.html:
+  warm light/dark palette as Tailwind 4 @theme tokens, 17px body text,
+  --tap-target: 3rem applied to buttons/selects/inputs by default, tabular
+  figures, safe-area padding, viewport-fit=cover, theme-color, iOS web-app meta.
+- Replaced the placeholder home page with a minimal branded landing card
+  (Issue 02 replaces it with the Style picker).
+
+Key decisions and reasoning
+- test:unit is now `vitest --run --passWithNoTests`; test:unit:watch keeps watch
+  mode. Reason: the acceptance criteria require `pnpm test:unit` to pass, and with
+  the example spec deleted the suite is empty and vitest's watch mode never exits.
+  It is the gate command, so it must be non-interactive.
+- Ran a one-off `pnpm format` across the repo. The committed docs/ADRs were not
+  prettier-clean, so `pnpm lint` failed for reasons unrelated to this ticket. Costs
+  a reflow diff in 11 markdown files once; every later ticket gets a green lint.
+- Design tokens live in layout.css rather than a component. Dark mode is a
+  prefers-color-scheme override of the same custom properties Tailwind emits, so
+  utilities (bg-surface, text-ink-muted, …) work in both schemes with no dark:
+  variants scattered through the markup.
+- The tap-target rule excludes range/checkbox/radio so the shared slider component
+  from Issue 03 can size itself.
+- No tests added. The PRD names exactly two test seams — the solver and the URL
+  codec — and neither exists yet.
+
+Files changed
+  A  src/routes/+layout.ts
+  M  src/app.html, src/routes/layout.css, src/routes/+page.svelte
+  M  vite.config.ts (adapter-node -> adapter-static)
+  M  package.json, pnpm-lock.yaml, README.md
+  D  playwright.config.ts, src/lib/index.ts,
+     src/lib/vitest-examples/**, src/routes/demo/**
+  M  CLAUDE.md, CONTEXT.md, docs/** (formatting only)
+
+Verification
+  pnpm build     ok — ./build contains index.html, _app/, robots.txt
+  pnpm check     0 errors, 0 warnings
+  pnpm lint      clean
+  pnpm test:unit passes (no test files yet)
+
+Notes for the next iteration
+- Next up: Issue 02 — pick a Style, see the weights. That needs the Style presets
+  and `solve()` in src/lib/dough/ (types.ts is already committed) plus the solver
+  test suite, which is the first real use of the test gate.
+- There is no svelte.config.js in this repo; SvelteKit config, including the
+  adapter, lives inside the sveltekit() plugin options in vite.config.ts.
+- No web app manifest or service worker yet — that is Issue 09. app.html already
+  carries the iOS home-screen meta tags.
+- Untracked/modified files under .scratch/ralph/ are not mine and were left alone.
