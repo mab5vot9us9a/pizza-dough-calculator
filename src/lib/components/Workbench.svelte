@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { clockTimes, formatClockTime } from "$lib/bake-time";
 	import AdjustableValue from "$lib/components/AdjustableValue.svelte";
 	import {
 		type Lock,
@@ -14,7 +15,7 @@
 	} from "$lib/dough";
 	import { formatGrams, formatHours, formatPercent } from "$lib/format";
 
-	import { ChevronLeft, Lock as LockIcon, Minus, Plus } from "@lucide/svelte";
+	import { ChevronLeft, Lock as LockIcon, Minus, Plus, X } from "@lucide/svelte";
 
 	// `recipe` is the parent's `$state` object; mutating it here is what re-solves.
 	let { recipe, onback }: { recipe: Recipe; onback: () => void } = $props();
@@ -108,6 +109,25 @@
 			({ stage }) => stage.hours > 0
 		)
 	);
+
+	/**
+	 * The Bake Time, as the `datetime-local` field holds it. Empty means unset, which
+	 * is the default and stays a first-class state: the schedule reads as durations and
+	 * is then true whenever the dough is made.
+	 *
+	 * Deliberately not part of the Recipe. It is session-only — never persisted, never
+	 * encoded into a shared link (ADR-0005), so a link cannot go stale.
+	 */
+	let bakeTime = $state("");
+
+	const bakeAt = $derived.by(() => {
+		if (!bakeTime) return null;
+		const at = new Date(bakeTime);
+		return Number.isNaN(at.getTime()) ? null : at;
+	});
+
+	/** The solved schedule as clock times, or null while there is no Bake Time. */
+	const clock = $derived(bakeAt ? clockTimes(solved.schedule, bakeAt) : null);
 
 	const YEAST_TYPES: { value: YeastType; label: string }[] = [
 		{ value: "fresh", label: "Fresh" },
@@ -354,18 +374,66 @@
 		<section class="flex flex-col gap-3">
 			<h2 class="text-ink-muted text-sm font-semibold tracking-wide uppercase">Proof</h2>
 
+			<div
+				class="border-line bg-raised flex items-center justify-between gap-3 rounded-2xl border p-4"
+			>
+				<label class="font-medium" for="bake-time">Eating at</label>
+				<span class="flex items-center gap-2">
+					<input
+						id="bake-time"
+						type="datetime-local"
+						class="border-line bg-sunken rounded-xl border px-3 py-2 text-right"
+						data-numeric
+						bind:value={bakeTime}
+					/>
+					{#if bakeTime}
+						<button
+							type="button"
+							class="border-line grid aspect-square place-items-center rounded-xl border"
+							style="width: var(--tap-target)"
+							aria-label="Clear the bake time"
+							onclick={() => (bakeTime = "")}
+						>
+							<X class="size-5" aria-hidden="true" />
+						</button>
+					{/if}
+				</span>
+			</div>
+
+			<!--
+				The Proof Schedule as the baker walks it. With a Bake Time set every line
+				also carries the clock time it happens at, starting with the mixing; with
+				none, the durations stand alone and no date appears anywhere.
+			-->
 			<ol class="border-line bg-raised flex flex-col gap-3 rounded-2xl border p-4">
+				{#snippet entryLine(label: string, at: Date | undefined, reading: string)}
+					<span class="flex flex-col">
+						<span class="font-medium">{label}</span>
+						{#if at && bakeAt}
+							<span class="text-ink-muted text-sm" data-numeric>
+								{formatClockTime(at, bakeAt)}
+							</span>
+						{/if}
+					</span>
+					<span class="text-ink-muted text-sm" data-numeric>{reading}</span>
+				{/snippet}
+
+				{#if clock}
+					<li class="flex items-baseline justify-between gap-3">
+						{@render entryLine("Mix", clock.mix, "")}
+					</li>
+				{/if}
 				{#each stages as entry (entry.key)}
 					<li class="flex items-baseline justify-between gap-3">
-						<span class="font-medium">{entry.label}</span>
-						<span class="text-ink-muted text-sm" data-numeric>
-							{formatHours(entry.stage.hours)} at {entry.stage.celsius} °C
-						</span>
+						{@render entryLine(
+							entry.label,
+							clock?.stages[entry.key],
+							`${formatHours(entry.stage.hours)} at ${entry.stage.celsius} °C`
+						)}
 					</li>
 				{/each}
 				<li class="border-line flex items-baseline justify-between gap-3 border-t pt-3">
-					<span class="font-medium">Bake</span>
-					<span class="text-ink-muted text-sm" data-numeric>{style.bake}</span>
+					{@render entryLine("Bake", clock?.bake, style.bake)}
 				</li>
 			</ol>
 
