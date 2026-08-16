@@ -383,3 +383,76 @@ Notes for the next iteration
 - STILL NOT VERIFIED ON A PHONE. AdjustableValue now drives up to nine controls and
   no one has dragged one on a touchscreen yet.
 - Untracked/modified and not mine: .scratch/ralph/ralph-once.sh.
+
+
+Iteration 6 — 2026-08-16 — Issue 06: Bake Time → clock times  [DONE]
+---------------------------------------------------------------------
+
+What I did
+- Added src/lib/bake-time.ts: clockTimes(schedule, bakeTime) counts the Proof
+  Schedule back from the bake, giving the moment to mix and the moment each
+  Stage begins; formatClockTime(at, bakeTime) prints one of those moments with
+  just enough date on it to be unambiguous.
+- Workbench: an "Eating at" datetime-local field with a clear button, above the
+  schedule list. With a Bake Time set the list gains a leading "Mix" line and
+  every entry — Stages and the Bake line — carries its clock time. With none,
+  the list is exactly what it was and no date appears anywhere.
+- 6 tests in src/lib/bake-time.test.ts, written first. 44 tests total (was 38).
+  check, lint, build all clean.
+
+Key decisions and reasoning
+- BAKE TIME IS NOT PART OF THE RECIPE. It is a $state string local to the
+  Workbench. ADR-0005 says it must never reach a shared link; keeping it out of
+  the Recipe enforces that structurally instead of leaving Issue 08 a note to
+  remember. The codec encodes a Recipe, and a Bake Time is not in one. Accepted
+  cost: going back to the Style picker clears it, which is what "session-only"
+  means anyway.
+- CALENDAR ARITHMETIC IS NOT FERMENTATION ARITHMETIC. The module sits beside
+  format.ts, not in src/lib/dough/. The PRD says solve() is the dough module's
+  whole computational interface, and counting hours on a wall clock has no
+  business behind it.
+- DATE CONTEXT ESCALATES IN THREE STEPS: bare time on the day of the bake,
+  "Fri 14:00" on any other day, "Sat 8 Aug, 14:00" once an entry is six or more
+  days out — the point where a weekday name stops being unique. Formatting is
+  pinned to en-GB so the app reads 24-hour and the tests are deterministic; the
+  PRD is English-only, so this is not an i18n hole.
+- A THIRD TEST SEAM, DELIBERATELY. The PRD names two. This adds a small third,
+  because the failure modes are silent arithmetic — a Stage of zero hours, an
+  Elastic Stage solved to 23.42 h, midnight and week boundaries — and a pure
+  module tested through its public surface is the same kind of test the solver
+  gets. The exclusions the PRD actually lists (component, localStorage, service
+  worker, Playwright) are untouched. The spec review flagged this; it is a
+  judgement call made with eyes open, not an oversight.
+- Times round to the whole minute. The Elastic Stage solves to full precision
+  (23.42 h) and a mixing time of 14:35:12 would be false precision on a number
+  the baker acts on with a bowl.
+- The schedule list reads off solved.schedule, so clock times follow the Elastic
+  Stage automatically when the Leavening is locked. No extra wiring.
+
+Files changed
+  A  src/lib/bake-time.ts, src/lib/bake-time.test.ts
+  M  src/lib/components/Workbench.svelte (Eating at field; clock times in the list)
+
+Verification
+  pnpm test:unit  44 passed
+  pnpm check      0 errors, 0 warnings
+  pnpm lint       clean
+  pnpm build      ok
+  svelte-autofixer on the changed markup: no issues (the presetUses $derived.by
+  suggestion is the same false positive as the last two iterations).
+  Reviewed on both axes. Standards: no violations, three judgement calls all
+  scoped to one component and left as they are. Spec: all six acceptance
+  criteria met, one scope note — the third test seam above.
+
+Notes for the next iteration
+- Next up: Issue 07 (Deviations) or 08 (session restore and shareable links);
+  09 (PWA) has been free since Issue 01.
+- FOR ISSUE 08: nothing to do about the Bake Time. It is not in the Recipe, so
+  it cannot be encoded by accident. Iteration 5's note still stands — the codec
+  must carry `lock` and `freshYeastPercent`.
+- FOR ISSUE 07: Iteration 5's note stands unchanged. A Preset carries no
+  Leavening figure, so a Deviation comparison has to derive one from the Preset
+  schedule, and `lock` has no Preset counterpart beyond "schedule".
+- STILL NOT VERIFIED ON A PHONE. Nine-plus sliders, and now a datetime-local
+  field whose native picker is the one control here nobody has seen on iOS.
+- Untracked/modified and not mine: .scratch/ralph/ralph-once.sh.
