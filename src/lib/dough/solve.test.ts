@@ -37,6 +37,46 @@ describe("the Anchor", () => {
 	});
 });
 
+describe("yeast type", () => {
+	it("reports a third of the weight when the same dough is made with dry yeast", () => {
+		const fresh = recipeFromStyle(styleById("neapolitan"));
+		const dry = { ...fresh, yeastType: "dry" as const };
+
+		// The baker swaps the block for the sachet; the dough ferments the same, so the
+		// sachet is a third of the weight.
+		expect(solve(fresh).yeast / solve(dry).yeast).toBeCloseTo(3, 1);
+	});
+
+	it("leaves the rest of the Recipe alone when the yeast type changes", () => {
+		const dry = recipeFromStyle(styleById("new-york"));
+		const fresh = { ...dry, yeastType: "fresh" as const };
+
+		const before = solve(dry);
+		const after = solve(fresh);
+
+		// Nothing the user asked for changes: it is the same dough at the same
+		// percentages, on the same schedule, at the same Total Dough Weight.
+		expect(after.percentages).toEqual(before.percentages);
+		expect(after.totalGrams).toBe(before.totalGrams);
+		expect(after.schedule).toEqual(before.schedule);
+
+		// The other weights do drift, and cannot not: the Total Dough Weight is the
+		// Anchor (ADR-0001), so the ~3 g of extra mass in a block of fresh yeast has to
+		// come out of the rest of the dough. Flour gives up those grams, and the
+		// ingredients measured off it shed a tenth. It is under half a percent.
+		const displaced = before.flour + before.water - (after.flour + after.water);
+		expect(displaced).toBeGreaterThan(0);
+		expect(displaced).toBeLessThan(0.005 * before.totalGrams);
+		for (const [now, then] of [
+			[after.salt, before.salt],
+			[after.oil, before.oil],
+			[after.sugar, before.sugar],
+		]) {
+			expect(Math.abs(now - then)).toBeLessThanOrEqual(0.1);
+		}
+	});
+});
+
 /**
  * Adds the displayed weights the way a reader does — in tenths of a gram, so the
  * assertion is about the decimals on screen and not about binary floating point.
