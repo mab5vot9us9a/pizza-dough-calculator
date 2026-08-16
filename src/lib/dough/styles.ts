@@ -1,0 +1,109 @@
+import type { Recipe, Style, StyleId } from "./types";
+
+/**
+ * The five Styles that ship with v1, with the approved Preset values.
+ *
+ * `freshYeastPercent` is a literal placeholder here. The ferment model derives it
+ * from the Proof Schedule in a later ticket; these figures are what that model
+ * produces for each Preset's schedule, so the numbers do not move when it lands.
+ */
+export const STYLES: readonly Style[] = [
+	{
+		id: "neapolitan",
+		name: "Neapolitan",
+		blurb: "Soft, blistered, and bare. A screaming-hot oven and 90 seconds.",
+		batch: { count: 4, ballGrams: 250 },
+		percentages: { hydration: 0.62, salt: 0.028, oil: 0, sugar: 0 },
+		yeastType: "fresh",
+		schedule: {
+			bulk: { hours: 2, celsius: 20 },
+			cold: { hours: 24, celsius: 4 },
+			warmUp: { hours: 2, celsius: 20 },
+		},
+		freshYeastPercent: 0.00737,
+		bake: "450–485 °C, 60–90 s",
+	},
+	{
+		id: "new-york",
+		name: "New York",
+		blurb: "Big foldable slices. Oil and sugar for a chewy crust that browns.",
+		batch: { count: 4, ballGrams: 280 },
+		percentages: { hydration: 0.63, salt: 0.02, oil: 0.02, sugar: 0.015 },
+		yeastType: "dry",
+		schedule: {
+			bulk: { hours: 1, celsius: 20 },
+			cold: { hours: 48, celsius: 4 },
+			warmUp: { hours: 2, celsius: 20 },
+		},
+		freshYeastPercent: 0.00532,
+		bake: "290 °C, 6–8 min",
+	},
+	{
+		id: "deep-dish",
+		name: "Deep Dish",
+		blurb: "Chicago-style. A rich, almost pastry-like dough baked in a pan.",
+		batch: { count: 2, ballGrams: 550 },
+		percentages: { hydration: 0.55, salt: 0.02, oil: 0.12, sugar: 0.02 },
+		yeastType: "dry",
+		schedule: {
+			bulk: { hours: 2, celsius: 20 },
+			cold: { hours: 24, celsius: 4 },
+			warmUp: { hours: 1, celsius: 20 },
+		},
+		freshYeastPercent: 0.00841,
+		bake: "220 °C, 25–30 min",
+	},
+	{
+		id: "sheet-pan",
+		name: "Sheet Pan",
+		blurb: "Roman teglia. Very wet, very open, pressed out into a tray.",
+		batch: { count: 1, ballGrams: 1000 },
+		percentages: { hydration: 0.75, salt: 0.022, oil: 0.04, sugar: 0 },
+		yeastType: "dry",
+		schedule: {
+			bulk: { hours: 2, celsius: 20 },
+			cold: { hours: 24, celsius: 4 },
+			warmUp: { hours: 2, celsius: 20 },
+		},
+		freshYeastPercent: 0.00737,
+		bake: "250 °C, 15–20 min",
+	},
+	{
+		id: "same-day",
+		name: "Same-day",
+		blurb: "Mixed in the morning, baked in the evening. No fridge involved.",
+		batch: { count: 4, ballGrams: 250 },
+		percentages: { hydration: 0.6, salt: 0.025, oil: 0.01, sugar: 0 },
+		yeastType: "dry",
+		schedule: {
+			bulk: { hours: 5, celsius: 22 },
+			cold: { hours: 0, celsius: 4 },
+			warmUp: { hours: 0, celsius: 20 },
+		},
+		freshYeastPercent: 0.00963,
+		bake: "280 °C, 8 min",
+	},
+];
+
+export function styleById(id: StyleId): Style {
+	const style = STYLES.find((candidate) => candidate.id === id);
+	if (!style) throw new Error(`Unknown style: ${id}`);
+	return style;
+}
+
+/** Seeds a fresh Recipe from a Style's Preset. */
+export function recipeFromStyle(style: Style): Recipe {
+	return {
+		styleId: style.id,
+		batch: { ...style.batch },
+		percentages: { ...style.percentages },
+		yeastType: style.yeastType,
+		schedule: {
+			bulk: { ...style.schedule.bulk },
+			cold: { ...style.schedule.cold },
+			warmUp: { ...style.schedule.warmUp },
+		},
+		lock: "schedule",
+		freshYeastPercent: style.freshYeastPercent,
+	};
+}

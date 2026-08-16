@@ -1,13 +1,21 @@
 <script lang="ts">
-	import { Pizza } from "@lucide/svelte";
+	import StylePicker from "$lib/components/StylePicker.svelte";
+	import Workbench from "$lib/components/Workbench.svelte";
+	import { type Recipe, type Style, recipeFromStyle } from "$lib/dough";
+
+	/**
+	 * The two screens of the app. Nothing is persisted yet — restoring the last
+	 * session and reading a Recipe out of the URL is a later ticket.
+	 */
+	let recipe = $state<Recipe | null>(null);
+
+	const pick = (style: Style) => (recipe = recipeFromStyle(style));
 </script>
 
 <svelte:head><title>Pizza Dough Calculator</title></svelte:head>
 
-<main class="mx-auto flex max-w-md flex-col gap-3 px-5 py-10">
-	<Pizza class="text-accent size-10" aria-hidden="true" />
-	<h1 class="text-3xl font-semibold tracking-tight">Pizza Dough Calculator</h1>
-	<p class="text-ink-muted">
-		Say how much dough you want and when you want to bake. Get gram weights and a proof schedule.
-	</p>
-</main>
+{#if recipe}
+	<Workbench {recipe} onback={() => (recipe = null)} />
+{:else}
+	<StylePicker onpick={pick} />
+{/if}
