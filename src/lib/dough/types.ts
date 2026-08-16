@@ -70,11 +70,6 @@ export interface Style {
 	percentages: Percentages;
 	yeastType: YeastType;
 	schedule: ProofSchedule;
-	/**
-	 * Leavening as a Baker's Percentage of fresh yeast. A literal placeholder until
-	 * the ferment model derives it from the Proof Schedule.
-	 */
-	freshYeastPercent: number;
 	bake: string;
 }
 

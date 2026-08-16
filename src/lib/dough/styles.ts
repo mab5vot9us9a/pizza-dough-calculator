@@ -1,11 +1,11 @@
+import { leaveningFor } from "./ferment";
 import type { Recipe, Style, StyleId } from "./types";
 
 /**
  * The five Styles that ship with v1, with the approved Preset values.
  *
- * `freshYeastPercent` is a literal placeholder here. The ferment model derives it
- * from the Proof Schedule in a later ticket; these figures are what that model
- * produces for each Preset's schedule, so the numbers do not move when it lands.
+ * A Preset carries no Leavening figure: it is what the Style's Proof Schedule asks
+ * for, so it is derived rather than written down twice.
  */
 export const STYLES: readonly Style[] = [
 	{
@@ -20,7 +20,6 @@ export const STYLES: readonly Style[] = [
 			cold: { hours: 24, celsius: 4 },
 			warmUp: { hours: 2, celsius: 20 },
 		},
-		freshYeastPercent: 0.00737,
 		bake: "450–485 °C, 60–90 s",
 	},
 	{
@@ -35,7 +34,6 @@ export const STYLES: readonly Style[] = [
 			cold: { hours: 48, celsius: 4 },
 			warmUp: { hours: 2, celsius: 20 },
 		},
-		freshYeastPercent: 0.00532,
 		bake: "290 °C, 6–8 min",
 	},
 	{
@@ -50,7 +48,6 @@ export const STYLES: readonly Style[] = [
 			cold: { hours: 24, celsius: 4 },
 			warmUp: { hours: 1, celsius: 20 },
 		},
-		freshYeastPercent: 0.00841,
 		bake: "220 °C, 25–30 min",
 	},
 	{
@@ -65,7 +62,6 @@ export const STYLES: readonly Style[] = [
 			cold: { hours: 24, celsius: 4 },
 			warmUp: { hours: 2, celsius: 20 },
 		},
-		freshYeastPercent: 0.00737,
 		bake: "250 °C, 15–20 min",
 	},
 	{
@@ -80,7 +76,6 @@ export const STYLES: readonly Style[] = [
 			cold: { hours: 0, celsius: 4 },
 			warmUp: { hours: 0, celsius: 20 },
 		},
-		freshYeastPercent: 0.00963,
 		bake: "280 °C, 8 min",
 	},
 ];
@@ -104,6 +99,7 @@ export function recipeFromStyle(style: Style): Recipe {
 			warmUp: { ...style.schedule.warmUp },
 		},
 		lock: "schedule",
-		freshYeastPercent: style.freshYeastPercent,
+		// Seeded so the figure is already right if the user locks the Leavening.
+		freshYeastPercent: leaveningFor(style.schedule),
 	};
 }

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { solve } from "./solve";
 import { STYLES, recipeFromStyle, styleById } from "./styles";
-import type { SolvedRecipe } from "./types";
+import { FRESH_PER_DRY, type SolvedRecipe } from "./types";
 
 describe("the Anchor", () => {
 	it("gives the Neapolitan Preset the Total Dough Weight it asked for", () => {
@@ -74,6 +74,76 @@ describe("yeast type", () => {
 		]) {
 			expect(Math.abs(now - then)).toBeLessThanOrEqual(0.1);
 		}
+	});
+});
+
+describe("the ferment model", () => {
+	// The Leavening a baker would recognise: a pinch, not a spoonful, and never zero.
+	// Published doughs on schedules like these call for something between a fifth of a
+	// percent of fresh yeast and two percent, so that is the band each Preset must land
+	// in — wide enough not to pin the constants ADR-0002 expects to be retuned, tight
+	// enough to fail if they move by the threefold that Q10 = 2 would have cost.
+	it.each([...STYLES])("gives $name's Preset schedule a plausible Leavening", (style) => {
+		const solved = solve(recipeFromStyle(style));
+
+		// Compared as fresh yeast, so the four dry-yeast Styles are in the same units.
+		const freshPercent = solved.yeastPercent * (solved.yeastType === "fresh" ? 1 : FRESH_PER_DRY);
+
+		expect(freshPercent * 100).toBeGreaterThan(0.2);
+		expect(freshPercent * 100).toBeLessThan(2);
+	});
+
+	it("needs less yeast in a warm kitchen than a cold one", () => {
+		const preset = recipeFromStyle(styleById("same-day"));
+		const inFebruary = {
+			...preset,
+			schedule: { ...preset.schedule, bulk: { hours: 5, celsius: 16 } },
+		};
+		const inAugust = {
+			...preset,
+			schedule: { ...preset.schedule, bulk: { hours: 5, celsius: 28 } },
+		};
+
+		expect(solve(inAugust).yeast).toBeLessThan(solve(inFebruary).yeast);
+	});
+
+	it("needs less yeast for a longer proof", () => {
+		const recipe = recipeFromStyle(styleById("neapolitan"));
+		const longer = {
+			...recipe,
+			schedule: { ...recipe.schedule, cold: { hours: 48, celsius: 4 } },
+		};
+
+		expect(solve(longer).yeast).toBeLessThan(solve(recipe).yeast);
+	});
+
+	// A Stage with no hours is absent, not a special case: giving the Same-day Style a
+	// zero-length Cold Proof at any temperature is the same dough it already was.
+	it("ignores a Stage with a zero duration", () => {
+		const sameDay = recipeFromStyle(styleById("same-day"));
+		const withEmptyCold = {
+			...sameDay,
+			schedule: { ...sameDay.schedule, cold: { hours: 0, celsius: 4 } },
+		};
+
+		expect(solve(withEmptyCold).yeast).toBe(solve(sameDay).yeast);
+	});
+
+	// Temperature is the whole reason the model exists: a day in the fridge is worth
+	// only a few hours on the worktop, so it cannot be counted hour for hour.
+	it("counts an hour in the fridge for less than an hour at room temperature", () => {
+		const recipe = recipeFromStyle(styleById("neapolitan"));
+		const anotherColdHour = {
+			...recipe,
+			schedule: { ...recipe.schedule, cold: { hours: 25, celsius: 4 } },
+		};
+		const anotherRoomHour = {
+			...recipe,
+			schedule: { ...recipe.schedule, bulk: { hours: 3, celsius: 20 } },
+		};
+
+		const saved = (later: typeof recipe) => solve(recipe).yeast - solve(later).yeast;
+		expect(saved(anotherColdHour)).toBeLessThan(saved(anotherRoomHour));
 	});
 });
 

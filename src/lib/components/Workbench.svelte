@@ -1,7 +1,7 @@
 <script lang="ts">
 	import AdjustableValue from "$lib/components/AdjustableValue.svelte";
 	import { type Percentages, type Recipe, type YeastType, solve, styleById } from "$lib/dough";
-	import { formatGrams, formatPercent } from "$lib/format";
+	import { formatGrams, formatHours, formatPercent } from "$lib/format";
 
 	import { ChevronLeft, Minus, Plus } from "@lucide/svelte";
 
@@ -70,6 +70,20 @@
 	];
 
 	const controls = $derived(CONTROLS.filter(({ key }) => presetUses(key)));
+
+	/**
+	 * The Proof Schedule as the baker walks it. A Stage of no hours is absent from the
+	 * walk-through, which is how the Same-day Style reads correctly with no Cold Proof
+	 * and no Warm-up. Its control stays put — an absent Stage is one the user can still
+	 * reach for, and a control that comes and goes is worse than one reading zero.
+	 */
+	const stages = $derived(
+		[
+			{ name: "Bulk", stage: recipe.schedule.bulk },
+			{ name: "Cold proof", stage: recipe.schedule.cold },
+			{ name: "Warm-up", stage: recipe.schedule.warmUp },
+		].filter(({ stage }) => stage.hours > 0)
+	);
 
 	const YEAST_TYPES: { value: YeastType; label: string }[] = [
 		{ value: "fresh", label: "Fresh" },
@@ -208,9 +222,77 @@
 			</div>
 		</section>
 
-		<section class="flex flex-col gap-2">
-			<h2 class="text-ink-muted text-sm font-semibold tracking-wide uppercase">Bake</h2>
-			<p class="border-line bg-raised rounded-2xl border p-4">{style.bake}</p>
+		<section class="flex flex-col gap-3">
+			<h2 class="text-ink-muted text-sm font-semibold tracking-wide uppercase">Proof</h2>
+
+			<ol class="border-line bg-raised flex flex-col gap-3 rounded-2xl border p-4">
+				{#each stages as entry (entry.name)}
+					<li class="flex items-baseline justify-between gap-3">
+						<span class="font-medium">{entry.name}</span>
+						<span class="text-ink-muted text-sm" data-numeric>
+							{formatHours(entry.stage.hours)} at {entry.stage.celsius} °C
+						</span>
+					</li>
+				{/each}
+				<li class="border-line flex items-baseline justify-between gap-3 border-t pt-3">
+					<span class="font-medium">Bake</span>
+					<span class="text-ink-muted text-sm" data-numeric>{style.bake}</span>
+				</li>
+			</ol>
+
+			<div class="border-line bg-raised flex flex-col gap-5 rounded-2xl border p-4">
+				<AdjustableValue
+					label="Bulk"
+					min={0}
+					max={24}
+					step={0.5}
+					unit=" h"
+					bind:value={recipe.schedule.bulk.hours}
+				/>
+				<AdjustableValue
+					label="Cold proof"
+					min={0}
+					max={96}
+					step={1}
+					unit=" h"
+					bind:value={recipe.schedule.cold.hours}
+				/>
+				<AdjustableValue
+					label="Warm-up"
+					min={0}
+					max={8}
+					step={0.5}
+					unit=" h"
+					bind:value={recipe.schedule.warmUp.hours}
+				/>
+
+				<!--
+					One room temperature, not two: the Bulk and the Warm-up both happen on the
+					same worktop, and a February kitchen is cold for both of them.
+				-->
+				<AdjustableValue
+					label="Room temp"
+					min={10}
+					max={35}
+					step={0.5}
+					unit=" °C"
+					bind:value={
+						() => recipe.schedule.bulk.celsius,
+						(celsius) => {
+							recipe.schedule.bulk.celsius = celsius;
+							recipe.schedule.warmUp.celsius = celsius;
+						}
+					}
+				/>
+				<AdjustableValue
+					label="Fridge temp"
+					min={0}
+					max={12}
+					step={0.5}
+					unit=" °C"
+					bind:value={recipe.schedule.cold.celsius}
+				/>
+			</div>
 		</section>
 
 		<!-- Deliberate breathing room: the sticky header must have something to scroll over. -->

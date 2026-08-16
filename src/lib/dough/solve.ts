@@ -1,3 +1,4 @@
+import { leaveningFor } from "./ferment";
 import { FRESH_PER_DRY, type Recipe, type SolvedRecipe } from "./types";
 
 const toGram = (grams: number) => Math.round(grams);
@@ -13,13 +14,16 @@ export function solve(recipe: Recipe): SolvedRecipe {
 	const { hydration, salt, oil, sugar } = recipe.percentages;
 	const totalGrams = recipe.batch.count * recipe.batch.ballGrams;
 
-	// Leavening enters the dough in the yeast type the user is actually weighing out.
-	// `recipe.lock` is not consulted yet: until the ferment model lands, the Preset's
-	// literal `freshYeastPercent` is treated like any other ingredient percentage.
+	// With the schedule locked, the Proof Schedule decides the Leavening. With the
+	// Leavening locked the user decides it instead, and a later ticket makes the
+	// Elastic Stage absorb the difference; until then the stored figure is taken as-is.
+	const freshYeastPercent =
+		recipe.lock === "leavening" ? recipe.freshYeastPercent : leaveningFor(recipe.schedule);
+
+	// Leavening is held as fresh yeast whatever the user's type, so the ferment model
+	// has one unit; it enters the dough as the type they are actually weighing out.
 	const yeastPercent =
-		recipe.yeastType === "fresh"
-			? recipe.freshYeastPercent
-			: recipe.freshYeastPercent / FRESH_PER_DRY;
+		recipe.yeastType === "fresh" ? freshYeastPercent : freshYeastPercent / FRESH_PER_DRY;
 
 	// Full precision internally; only the returned weights are rounded.
 	const flour = totalGrams / (1 + hydration + salt + oil + sugar + yeastPercent);
