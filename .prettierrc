@@ -1,0 +1,40 @@
+{
+	"useTabs": true,
+	"singleQuote": false,
+	"trailingComma": "es5",
+	"printWidth": 100,
+	"plugins": [
+		"prettier-plugin-svelte",
+		"prettier-plugin-tailwindcss",
+		"@trivago/prettier-plugin-sort-imports"
+	],
+	"importOrder": [
+		"^\\.\\.?\/\\$types",
+		"^@sveltejs/(.*)$",
+		"^\\$app/(.*)$",
+		"^svelte",
+		"^@?(?!lucide)\\w+",
+		"^\\$lib/(.*)$",
+		"^\\$ui/(.*)$",
+		"^\\$components/(.*)$",
+		"^@(?!lucide)",
+		"^@lucide/(.*)$",
+		"^[./]"
+	],
+	"importOrderSeparation": true,
+	"importOrderSortSpecifiers": true,
+	"overrides": [
+		{
+			"files": "*.svelte",
+			"options": {
+				"parser": "svelte"
+			}
+		},
+		{
+			"files": "*.md",
+			"options": {
+				"proseWrap": "always"
+			}
+		}
+	]
+}
