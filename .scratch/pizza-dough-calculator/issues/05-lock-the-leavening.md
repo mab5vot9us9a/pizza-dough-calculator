@@ -1,6 +1,6 @@
 # Lock the Leavening
 
-Status: ready-for-agent
+Status: done
 Type: task
 Blocked by: Proof Schedule and the ferment model
 
@@ -26,15 +26,46 @@ blows out overnight.
 
 ## Acceptance criteria
 
-- [ ] The user can lock either the Proof Schedule or the Leavening, and which one is locked
+- [x] The user can lock either the Proof Schedule or the Leavening, and which one is locked
       is unmistakable on screen.
-- [ ] With the schedule locked, Leavening derives from it, as before.
-- [ ] With the Leavening locked, the Elastic Stage's duration derives from it and the rest
+- [x] With the schedule locked, Leavening derives from it, as before.
+- [x] With the Leavening locked, the Elastic Stage's duration derives from it and the rest
       of the schedule holds still.
-- [ ] The Elastic Stage is the Cold Proof when present and the Bulk when not.
-- [ ] A Leavening quantity high enough to over-ferment drives the Elastic Stage to zero,
+- [x] The Elastic Stage is the Cold Proof when present and the Bulk when not.
+- [x] A Leavening quantity high enough to over-ferment drives the Elastic Stage to zero,
       never to a negative duration.
-- [ ] Adjusting the Leavening while it is locked visibly moves the Elastic Stage.
-- [ ] Unit tests cover both directions of the solve, that locking each side in sequence
+- [x] Adjusting the Leavening while it is locked visibly moves the Elastic Stage.
+- [x] Unit tests cover both directions of the solve, that locking each side in sequence
       round-trips to the original values, that the Elastic Stage falls back to the Bulk on
       the Same-day Style, and that the zero clamp holds.
+
+## Resolution
+
+`scheduleFor(schedule, freshYeastPercent)` in `ferment.ts` runs the model backwards, and
+`solve()` calls it whenever `lock === "leavening"`. `SolvedRecipe` gained `elasticStage` so
+the screen can say which Stage is giving way. The derived side of the relationship loses its
+control and shows a locked readout in its place, so no number on screen is one the app is
+about to overwrite.
+
+Three things worth carrying forward.
+
+**Flipping the Lock is a domain operation, not a UI one.** Iteration 4 left
+`Recipe.freshYeastPercent` stale the moment the user flipped the Lock — the stored figure was
+seeded from the Preset and never updated while the schedule drove. `withLock(recipe, lock)`
+now writes whichever side is about to become derived with what the schedule or the yeast was
+already asking for, so flipping changes nothing until the user moves something. It is
+exported from the barrel and covered by a round-trip test over all five Styles.
+
+**The Elastic Stage is read off the stored schedule, not the solved one.** Once too much
+yeast has clamped the Cold Proof to zero, it is still the Stage giving way; deciding from the
+solved schedule would hand the role to the Bulk and start shrinking that too.
+
+**Handing the Elastic role over needs the on-screen value banked first.** Because the role
+depends on whether there is a Cold Proof, raising a zeroed one takes it back from the Bulk —
+and the Bulk becomes an input again holding whatever was stored before the Lock, not what it
+was showing a moment ago. `setStageHours` in the Workbench banks the solved Elastic duration
+into the Recipe before any other duration changes around it. This is a UI-level seam and is
+not covered by a test; the PRD names only the solver and the URL codec as test seams.
+
+Yeast's fresh/dry conversion moved into `src/lib/dough/yeast.ts` on its fourth appearance,
+as the last three iterations kept noting it should.

@@ -292,3 +292,94 @@ Notes for the next iteration
 - Still NOT VERIFIED ON A PHONE. AdjustableValue now drives nine controls and no
   one has yet dragged one on a touchscreen.
 - Untracked/modified and not mine: .scratch/ralph/ralph-once.sh.
+
+Iteration 5 — 2026-08-16 — Issue 05: Lock the Leavening  [DONE]
+----------------------------------------------------------------
+
+What I did
+- ferment.ts gained the model run backwards: scheduleFor(schedule, freshYeastPercent)
+  finds the Elastic Stage, works out the Activity the other Stages already deliver,
+  and gives the Elastic Stage the hours that make up the difference. elasticStageOf
+  names it — the Cold Proof when there is one, otherwise the Bulk.
+- solve() calls it whenever lock === "leavening". SolvedRecipe gained elasticStage
+  and its schedule is now the solved one, not a copy of the input.
+- withLock(recipe, lock) is the Lock flip as a domain operation, exported from the
+  barrel. Whichever side is about to become derived is first written with what the
+  other side was already asking for.
+- Workbench: a "Locked" section with a two-way segmented control and a line of prose
+  saying which Stage moves. The derived side — the yeast quantity, or the Elastic
+  Stage's duration — loses its slider and shows a locked readout in its place.
+- Extracted src/lib/dough/yeast.ts (inYeastType / asFreshPercent) on the fresh/dry
+  ternary's fourth appearance, as the last three iterations kept saying to.
+- Also extracted two snippets in the Workbench: `segmented` (the Lock and the yeast
+  type are the same control) and `solvedValue` (the locked readout), and folded the
+  three duration sliders into one #each over a DURATIONS table.
+- 38 tests (was 26). check, lint, build clean; dev server 200.
+
+Key decisions and reasoning
+- THE ELASTIC STAGE IS READ OFF THE STORED SCHEDULE, NOT THE SOLVED ONE. Once too
+  much yeast has clamped the Cold Proof to zero it is still the Stage giving way. If
+  the role were decided from the solved schedule, the Bulk would quietly take over
+  at that moment and start shrinking too — the clamp would leak into the Stage it
+  was supposed to protect.
+- HANDING THE ROLE OVER NEEDS THE ON-SCREEN VALUE BANKED. The spec review caught the
+  reverse case: with the Leavening locked on a Same-day dough the Bulk is Elastic and
+  is a readout; raise the Cold Proof off zero and the role moves, so the Bulk becomes
+  an input again — holding whatever was stored before the Lock rather than the number
+  it was just displaying. setStageHours() banks the solved Elastic duration into the
+  Recipe before changing any other duration around it. UI-level, so no test: the PRD
+  names the solver and the URL codec as the only seams.
+- withLock IS IN THE DOMAIN, NOT THE COMPONENT. It fixes the staleness Iteration 4
+  flagged, and it is the only part of the Lock the solver cannot express — solve() is
+  pure, so something has to decide what the Recipe holds at the moment of the flip.
+  Being in the domain means the round-trip is testable through the public surface,
+  which is what the ticket asks for.
+- THE TESTS STILL DO NOT KNOW THE CONSTANTS. Every Lock test is stated as a direction
+  or a round-trip ("twice the yeast, less fridge time"; "both Locks in sequence gives
+  the schedule back"), never as a figure. The one absolute is the zero clamp.
+- The locked yeast readout shows a percentage, not grams, so the field reads in the
+  same unit whether it is an input or an answer. The grams are in the sticky header
+  a few centimetres away.
+- Leavening is adjusted in the units of the yeast the baker is holding (0.05–5%),
+  not in the fresh-yeast figure the model stores. It matches what the header shows.
+
+Files changed
+  A  src/lib/dough/yeast.ts
+  M  src/lib/dough/ferment.ts (elasticStageOf, scheduleFor, rateAt)
+  M  src/lib/dough/solve.ts (the leavening branch; withLock)
+  M  src/lib/dough/types.ts (ElasticStage; SolvedRecipe.elasticStage)
+  M  src/lib/dough/index.ts (withLock, the yeast converters)
+  M  src/lib/dough/solve.test.ts (+12 tests, "the Lock")
+  M  src/lib/components/Workbench.svelte (Locked section; derived readouts)
+
+Verification
+  pnpm test:unit  38 passed
+  pnpm check      0 errors, 0 warnings
+  pnpm lint       clean
+  pnpm build      ok
+  pnpm dev        200
+  svelte-autofixer on Workbench.svelte: no issues (the $derived.by suggestion on
+  presetUses is the same false positive as last iteration).
+  Reviewed on both axes before committing. Standards found three judgement calls —
+  the yeast conversion living in the view, the Elastic Stage's label written out by
+  hand instead of taken from DURATIONS, and an #each keyed on label rather than
+  value — all three fixed. Spec found the Elastic-role handover above, fixed, and
+  called the segmented-control extraction mild scope creep: kept, because without it
+  the Lock control would have been a second copy of the yeast-type radio group.
+
+Notes for the next iteration
+- Next up: Issue 06 (Bake Time -> clock times) or 07 (Deviations). Both are unblocked
+  by Issue 04; 08 was blocked on this ticket and is now free too.
+- FOR ISSUE 07: Deviation tracking compares the Recipe against its Preset. Note that
+  a Preset carries no Leavening figure at all — Recipe.freshYeastPercent has nothing
+  to compare against unless the comparison derives leaveningFor(style.schedule). And
+  `lock` itself is a Recipe field with no Preset counterpart beyond "schedule".
+- FOR ISSUE 08: the persisted/encoded Recipe must carry `lock` and
+  `freshYeastPercent`, or a shared link to a yeast-locked dough decodes as a
+  schedule-locked one and silently means something else.
+- The Elastic Stage's solved duration is full precision (e.g. 23.42 h) and is only
+  rounded for display. If Issue 06 turns Stages into clock times, that is where the
+  precision starts to show.
+- STILL NOT VERIFIED ON A PHONE. AdjustableValue now drives up to nine controls and
+  no one has dragged one on a touchscreen yet.
+- Untracked/modified and not mine: .scratch/ralph/ralph-once.sh.
