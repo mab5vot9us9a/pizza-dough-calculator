@@ -130,3 +130,77 @@ Notes for the next iteration
   solve.ts and Workbench.svelte. Two sites is not yet worth a helper; if Issue 05
   adds a third, extract a yeast label/conversion helper then.
 - Still untouched and not mine: .scratch/ralph/ralph-once.sh.
+
+
+Iteration 3 — 2026-08-16 — Issue 03: Adjust the Recipe freely  [DONE]
+---------------------------------------------------------------------
+
+What I did
+- Built src/lib/components/AdjustableValue.svelte, the one control every
+  adjustable number in the app will use: a range slider plus a readout that
+  becomes a decimal-keypad field when tapped. Committed to its interface first,
+  since Issues 04–06 bind proof hours and temperatures to it.
+- Wired Hydration, salt, oil and sugar through it in Workbench.svelte, and added
+  a fresh/dry yeast segmented control.
+- Added two solver tests covering the yeast type swap. The Hydration test the
+  ticket asks for already existed from Iteration 2.
+- 17 tests. check, lint and build all clean; dev server smoke-tested.
+
+Key decisions and reasoning
+- THE YEAST TOGGLE CANNOT "CHANGE NOTHING ELSE". Second acceptance criteria
+  collision in a row, same root as Iteration 2's. Fresh yeast weighs 3× dry, the
+  Total Dough Weight is the Anchor, so swapping types moves ~3 g of mass that
+  flour has to give up; the ingredients measured off flour shed a tenth with it.
+  Under half a percent, and unavoidable short of breaking the column's sum. The
+  test asserts what genuinely holds — percentages, schedule, total identical,
+  yeast ratio 3 — then pins the drift below 0.5% of the batch so it fails if it
+  ever grows. Written up in full in the issue file.
+- The control is unit-agnostic: it moves a number between min and max and knows
+  nothing about Baker's Percentages. The Workbench binds through a getter/setter
+  pair (Svelte 5 function bindings) to convert fraction to percent. Cost is one
+  conversion at four call sites; benefit is that hours and °C bind directly with
+  no conversion at all in the next tickets.
+- Ranges are wide (Hydration 40–110%, oil 0–30%) so the ends are somewhere no
+  one arrives at by accident, not somewhere the app stops them. Typed values
+  clamp into range rather than being rejected — the alternative is the slider
+  and the number disagreeing.
+- Step is per-control: 0.5 for Hydration, 0.1 for the small ingredients. A
+  uniform 0.5 would have made Neapolitan's 2.8% salt unreachable by dragging.
+- inputmode="decimal" on a text input, not type="number": it raises the right
+  keypad without spinner arrows, and the draft can stay a string mid-edit.
+  Commas are read as decimal points — a German keyboard offers a comma.
+- Extracted presetUses() after the standards review flagged the "does this Style
+  use oil/sugar" rule written twice, once per-field in the weights table and
+  once generically for the controls.
+
+Files changed
+  A  src/lib/components/AdjustableValue.svelte
+  M  src/lib/components/Workbench.svelte
+  M  src/lib/dough/solve.test.ts
+
+Verification
+  pnpm test:unit  17 passed
+  pnpm check      0 errors, 0 warnings
+  pnpm lint       clean
+  pnpm build      ok
+  pnpm dev        page renders, 200
+  Reviewed on both axes before committing. Standards found one duplication
+  (fixed above); Spec found only the yeast-toggle conflict.
+
+Notes for the next iteration
+- Next up: Issue 04 — the Proof Schedule and the ferment model. That replaces the
+  literal freshYeastPercent in styles.ts with 6 / activity, and makes solve()
+  finally consult recipe.lock. The schedule Stage controls are AdjustableValue
+  with unit=" h" and " °C" and no conversion in the binding.
+- The fresh/dry ternary the last iteration flagged now appears in three places
+  (solve.ts, the weights table, YEAST_TYPES). Issue 04 or 05 should extract a
+  yeast label/conversion helper — the threshold agreed last time is reached.
+- No interaction test exists for AdjustableValue and none is planned: the PRD
+  names exactly two test seams and component tests are out of scope. NOT YET
+  VERIFIED IN A BROWSER — the component compiles, type-checks, passes the Svelte
+  autofixer and the page renders server-side, but no one has dragged the slider
+  or tapped the readout. Worth two minutes on a phone before Issue 04 builds
+  more controls on top of it.
+- Untracked/modified and not mine: .scratch/ralph/ralph-once.sh, and a
+  md:flex-row tweak in StylePicker.svelte that appeared mid-iteration. Both left
+  alone and uncommitted.
