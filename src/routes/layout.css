@@ -1,1 +1,80 @@
 @import "tailwindcss";
+
+/*
+ * Base design tokens. The app is used one-handed on a phone in a kitchen, so the
+ * defaults here are deliberately large and low-contrast-friendly: body text a notch
+ * above the browser default, generous spacing, and a tap target every later ticket can
+ * rely on without setting its own.
+ */
+@theme {
+	--font-sans:
+		ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+	--font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+
+	/* Warm, flour-and-crust palette. Overridden below for dark mode. */
+	--color-surface: #faf6f0;
+	--color-raised: #ffffff;
+	--color-sunken: #f1e9de;
+	--color-line: #e2d7c7;
+	--color-ink: #241d16;
+	--color-ink-muted: #6f6558;
+	--color-accent: #c0392b;
+	--color-accent-ink: #ffffff;
+
+	/* Minimum comfortable tap target for floury thumbs. */
+	--tap-target: 3rem;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--color-surface: #191512;
+		--color-raised: #241f1a;
+		--color-sunken: #120f0d;
+		--color-line: #3a322a;
+		--color-ink: #f3ece2;
+		--color-ink-muted: #a29685;
+		--color-accent: #e8604f;
+		--color-accent-ink: #1a0f0d;
+	}
+}
+
+@layer base {
+	html {
+		/* Rotating the phone must not silently rescale the numbers. */
+		-webkit-text-size-adjust: 100%;
+	}
+
+	body {
+		background-color: var(--color-surface);
+		color: var(--color-ink);
+		font-family: var(--font-sans);
+		font-size: 1.0625rem;
+		line-height: 1.5;
+		/* Full-screen when installed to the home screen. */
+		min-height: 100dvh;
+		padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+			env(safe-area-inset-left);
+		/* No rubber-band scroll behind a sticky results header. */
+		overscroll-behavior-y: none;
+		-webkit-font-smoothing: antialiased;
+	}
+
+	/* Numbers change constantly while dragging; tabular figures stop them jittering. */
+	:where(output, [data-numeric]) {
+		font-variant-numeric: tabular-nums;
+	}
+
+	:where(button, [role="button"], a, label, input, select, summary) {
+		touch-action: manipulation;
+	}
+
+	:where(button, [role="button"], select, summary),
+	:where(input):not([type="range"], [type="checkbox"], [type="radio"]) {
+		min-height: var(--tap-target);
+	}
+
+	:where(:focus-visible) {
+		outline: 2px solid var(--color-accent);
+		outline-offset: 2px;
+	}
+}
