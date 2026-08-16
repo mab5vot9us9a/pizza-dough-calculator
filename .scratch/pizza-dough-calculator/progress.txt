@@ -204,3 +204,91 @@ Notes for the next iteration
 - Untracked/modified and not mine: .scratch/ralph/ralph-once.sh, and a
   md:flex-row tweak in StylePicker.svelte that appeared mid-iteration. Both left
   alone and uncommitted.
+
+
+Iteration 4 — 2026-08-16 — Issue 04: Proof Schedule and the ferment model  [DONE]
+---------------------------------------------------------------------------------
+
+What I did
+- Added src/lib/dough/ferment.ts: the Q10 rate law from ADR-0002. Activity is
+  Σ hours × 3^((celsius − 20) / 10) across the Stages; the Leavening a schedule
+  asks for is the target divided by that. Not re-exported from the barrel.
+- Deleted Style.freshYeastPercent and the five literals in styles.ts. The Preset
+  no longer carries a Leavening figure — it is what its own schedule asks for.
+  recipeFromStyle seeds Recipe.freshYeastPercent from the model instead.
+- solve() now consults recipe.lock: with the schedule locked (always, for now)
+  the Leavening comes from the model. The lock === "leavening" branch takes the
+  stored figure as-is; the Elastic Stage is Issue 05.
+- Workbench: a Proof section with the schedule as an ordered list of the Stages
+  the dough actually passes through, ending at the Style's bake string, over
+  five AdjustableValue controls — three durations, room temp, fridge temp. The
+  standalone Bake section is gone; the bake line now closes the list.
+- Added formatHours to src/lib/format.ts.
+- 26 tests (was 17). All of check, lint, build and test:unit clean.
+
+Key decisions and reasoning
+- K IS IN PERCENTAGE POINTS. ADR-0002 writes "leavening% × activity = 6" with
+  Leavening counted in percentage points; the code holds every Baker's
+  Percentage as a fraction. The constant is therefore 6/100, and the first run
+  without it put 184 g of yeast in a 1000 g dough. Commented at the constant.
+  Confirmed correct by the five Presets solving to exactly the placeholder
+  figures Iteration 2 wrote down (Neapolitan 0.737%, Same-day 0.963%, …), so
+  nothing moved when the model replaced the literals.
+- ONE ROOM TEMPERATURE, NOT TWO. The Bulk and the Warm-up share a worktop, so
+  one control writes both. Two controls would let the user state a contradiction
+  and answer a question they never asked. The Cold Proof keeps its own.
+- ALL FIVE CONTROLS ALWAYS SHOWN. First cut hid the Warm-up and the fridge
+  temperature when there was no Cold Proof. The spec review was right that this
+  breaks "durations are all adjustable" — on Same-day, two of the five were
+  unreachable, and the user had to invent a Cold Proof to get a Warm-up back. An
+  absent Stage is one the user can still reach for. The list still omits it.
+- Zero Activity reports zero Leavening rather than an infinity that would empty
+  the Anchor's column. Every duration can be dragged to zero, so this is
+  reachable, not theoretical.
+- THE TESTS DELIBERATELY DO NOT KNOW THE CONSTANTS. I first wrote a test pinning
+  Neapolitan to 0.737% and deleted it: the PRD forbids exactly that ("a test that
+  has to be rewritten when a constant is retuned is testing the wrong thing").
+  The Preset coverage asserts a 0.2%–2% fresh-yeast band, compared in fresh units
+  so the four dry Styles are commensurable; the rest assert directions.
+- Stage list variables are `stages`, not `steps` — CONTEXT.md lists "step" as a
+  synonym to avoid, and the standards review caught it in both the code and my
+  own comment. The Bulk control is labelled "Bulk" for the same reason.
+
+Files changed
+  A  src/lib/dough/ferment.ts
+  M  src/lib/dough/solve.ts (lock-aware; Leavening from the model)
+  M  src/lib/dough/styles.ts (placeholder literals -> derived seed)
+  M  src/lib/dough/types.ts (Style.freshYeastPercent removed)
+  M  src/lib/dough/solve.test.ts (+9 tests)
+  M  src/lib/format.ts (formatHours)
+  M  src/lib/components/Workbench.svelte (Proof section; Bake section folded in)
+
+Verification
+  pnpm test:unit  26 passed
+  pnpm check      0 errors, 0 warnings
+  pnpm lint       clean
+  pnpm build      ok — wrote ./build
+  svelte-autofixer on Workbench.svelte: no issues. Its one suggestion — rewrite
+  the presetUses $derived as $derived.by — is a false positive; that derived is
+  meant to hold a function and $derived.by would call it with no argument.
+  Reviewed on both axes before committing. Both findings above ("all five
+  controls" and the constant-pinning test) came from that review and are fixed;
+  the naming fixes came from the standards axis.
+
+Notes for the next iteration
+- Next up: Issue 05 — lock the Leavening. solve() already branches on
+  recipe.lock; the "leavening" branch currently takes the stored percentage at
+  face value and does not touch the schedule. That branch is where the Elastic
+  Stage (Cold Proof if present, else Bulk) has to absorb the difference, clamped
+  at zero.
+- CARRY THIS ONE: Recipe.freshYeastPercent is seeded from the Preset schedule and
+  is then never updated while lock === "schedule". The moment the user flips the
+  lock it will be stale — whatever they last saw on screen is not what is stored.
+  Issue 05 must re-seed it from the current schedule as the lock flips, or make
+  the Leavening branch read a value the UI actually wrote.
+- The fresh/dry ternary now appears in solve.ts, the weights table, YEAST_TYPES
+  and the new plausibility test. Iteration 3 said the threshold was reached; it
+  is now well past. Extract a yeast helper in Issue 05.
+- Still NOT VERIFIED ON A PHONE. AdjustableValue now drives nine controls and no
+  one has yet dragged one on a touchscreen.
+- Untracked/modified and not mine: .scratch/ralph/ralph-once.sh.
