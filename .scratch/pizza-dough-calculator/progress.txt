@@ -456,3 +456,89 @@ Notes for the next iteration
 - STILL NOT VERIFIED ON A PHONE. Nine-plus sliders, and now a datetime-local
   field whose native picker is the one control here nobody has seen on iOS.
 - Untracked/modified and not mine: .scratch/ralph/ralph-once.sh.
+
+
+Iteration 7 — 2026-08-17 — Issue 07: Deviations — mark, revert, reset  [DONE]
+-----------------------------------------------------------------------------
+
+What I did
+- Added src/lib/dough/deviations.ts: deviationsOf(recipe) returns what the Preset
+  said for every field the Recipe no longer agrees with it about; isModified is
+  that set being non-empty; revert(recipe, field) copies one value back out of the
+  Preset; resetToPreset(recipe) starts the Style again. One table of thirteen
+  fields — one per adjustment the app offers — says how each is read, what the
+  Preset says, and how to put it back.
+- Added src/lib/components/RevertChip.svelte: the mark and the way back in one
+  control ("was 62%", tap to revert). AdjustableValue takes an optional was/
+  onrevert pair and renders it beside its label, so all nine-plus sliders gained
+  per-field revert at once; the Batch steppers and the yeast type carry their own.
+- Workbench header: a "modified" pill beside the Style name and a Reset button,
+  both present only when there is something to say.
+- Extracted copyRecipe into styles.ts; assign() in the Workbench writes a Recipe
+  the domain handed back over the parent's $state object, and setLock now uses it.
+- 55 tests (was 44). check, lint, build clean; dev server 200.
+
+Key decisions and reasoning
+- THE DERIVED SIDE OF THE LOCK IS NEVER A DEVIATION. With the schedule locked the
+  Leavening is an answer, so it is not marked whatever the schedule does to it;
+  with the Leavening locked the Elastic Stage's hours are the answer, so they are
+  not marked either. The spec review caught the second half: setStageHours banks
+  the Elastic Stage's solved duration into the Recipe, and marking that left the
+  Recipe reading "modified" about a fractional Cold Proof nobody chose, on a
+  control that is a readout and so could not offer a revert. Two tests pin it,
+  including that the mark reappears the instant the Lock hands that side back.
+- THIRTEEN FIELDS, ONE PER CONTROL. The field list is the app's adjustments, not
+  the Recipe's shape. So the room temperature is one field writing both the Bulk
+  and the Warm-up (as its control does), the Warm-up temperature is not a field at
+  all, and `lock` is not one either — it is which side the baker drives, not a
+  value of the dough. Written up in the issue file, including the one gap: a
+  Recipe decoded in Issue 08 with a divergent Warm-up temperature would neither
+  mark nor revert it.
+- A PRESET CARRIES NO LEAVENING FIGURE (Iteration 5's note), so the comparison
+  derives one from the Preset schedule with the ferment model. The alternative —
+  putting the figure back on Style — would store the same number twice.
+- The chips read in the units of the control they sit beside, not the Preset's:
+  the Leavening chip converts through the *current* yeast type so "was" and "is"
+  are commensurable even on a dough whose yeast type was swapped too.
+- The revert is per-control rather than per-Recipe-field, which is why it is a
+  component prop on AdjustableValue instead of a row of buttons somewhere: the
+  ticket's motivation is undoing one fat-fingered drag, and the drag is where the
+  undo has to be.
+- No component tests, as ever. deviations.ts is a pure module tested through its
+  public surface — the same latitude Iteration 6 took for bake-time.ts.
+
+Files changed
+  A  src/lib/dough/deviations.ts, src/lib/dough/deviations.test.ts
+  A  src/lib/components/RevertChip.svelte
+  M  src/lib/dough/styles.ts (copyRecipe), src/lib/dough/index.ts (barrel)
+  M  src/lib/components/AdjustableValue.svelte (was/onrevert)
+  M  src/lib/components/Workbench.svelte (marks, reverts, modified pill, Reset)
+
+Verification
+  pnpm test:unit  55 passed
+  pnpm check      0 errors, 0 warnings
+  pnpm lint       clean
+  pnpm build      ok
+  pnpm dev        200
+  Reviewed on both axes before committing. Spec found the Elastic Stage marking
+  bug above (fixed at the root, in the domain, not hidden in the view) and the
+  yeast-unit note (kept, commented). Standards found the Recipe deep-copy written
+  a third time (extracted copyRecipe) and RevertChip's props not using the
+  interface Props convention (fixed). Two standards judgement calls kept: the
+  `was` formatter is a switch in the view, because display units are the view's
+  business and the domain is deliberately unit-agnostic; and DURATIONS carries
+  both a schedule key and a DeviationField, which is the UI's own mapping table.
+
+Notes for the next iteration
+- Next up: Issue 08 (session restore and shareable links) or 09 (PWA). Both are
+  unblocked; 08 is the last thing the domain needs.
+- FOR ISSUE 08: Iteration 5's note stands — the encoded Recipe must carry `lock`
+  and `freshYeastPercent`. Now also: nothing about Deviations needs encoding, by
+  construction, because they are derived from styleId. And copyRecipe is there
+  if the codec wants a clean Recipe to fill in.
+- FOR ISSUE 08: decoding must not produce a Recipe whose Warm-up temperature
+  differs from its Bulk unless a control for it is added, per the gap above.
+- STILL NOT VERIFIED ON A PHONE. The chips are the tenth-plus tap target added
+  without anyone touching a touchscreen, and they sit in the same row as a
+  slider's readout — the one place a mis-tap would be annoying.
+- Untracked/modified and not mine: .scratch/ralph/ralph-once.sh.
