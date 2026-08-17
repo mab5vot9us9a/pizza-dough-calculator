@@ -5,6 +5,15 @@
  * ferment model and the rounding live behind it and are deliberately not exported.
  */
 export * from "./types";
-export { STYLES, recipeFromStyle, styleById } from "./styles";
+export {
+	type DeviationField,
+	type DeviationValue,
+	type Deviations,
+	deviationsOf,
+	isModified,
+	resetToPreset,
+	revert,
+} from "./deviations";
+export { STYLES, copyRecipe, recipeFromStyle, styleById } from "./styles";
 export { solve, withLock } from "./solve";
 export { asFreshPercent, inYeastType } from "./yeast";

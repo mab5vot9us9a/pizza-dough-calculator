@@ -1,21 +1,28 @@
 <script lang="ts">
 	import { clockTimes, formatClockTime } from "$lib/bake-time";
 	import AdjustableValue from "$lib/components/AdjustableValue.svelte";
+	import RevertChip from "$lib/components/RevertChip.svelte";
 	import {
+		type DeviationField,
 		type Lock,
 		type Percentages,
 		type ProofSchedule,
 		type Recipe,
 		type YeastType,
 		asFreshPercent,
+		copyRecipe,
+		deviationsOf,
 		inYeastType,
+		isModified,
+		resetToPreset,
+		revert,
 		solve,
 		styleById,
 		withLock,
 	} from "$lib/dough";
 	import { formatGrams, formatHours, formatPercent } from "$lib/format";
 
-	import { ChevronLeft, Lock as LockIcon, Minus, Plus, X } from "@lucide/svelte";
+	import { ChevronLeft, Lock as LockIcon, Minus, Plus, RotateCcw, X } from "@lucide/svelte";
 
 	// `recipe` is the parent's `$state` object; mutating it here is what re-solves.
 	let { recipe, onback }: { recipe: Recipe; onback: () => void } = $props();
@@ -90,10 +97,16 @@
 	 * user can still reach for, and a control that comes and goes is worse than one
 	 * reading zero.
 	 */
-	const DURATIONS: { key: keyof ProofSchedule; label: string; max: number; step: number }[] = [
-		{ key: "bulk", label: "Bulk", max: 24, step: 0.5 },
-		{ key: "cold", label: "Cold proof", max: 96, step: 1 },
-		{ key: "warmUp", label: "Warm-up", max: 8, step: 0.5 },
+	const DURATIONS: {
+		key: keyof ProofSchedule;
+		field: DeviationField;
+		label: string;
+		max: number;
+		step: number;
+	}[] = [
+		{ key: "bulk", field: "bulkHours", label: "Bulk", max: 24, step: 0.5 },
+		{ key: "cold", field: "coldHours", label: "Cold proof", max: 96, step: 1 },
+		{ key: "warmUp", field: "warmUpHours", label: "Warm-up", max: 8, step: 0.5 },
 	];
 
 	/**
@@ -151,13 +164,72 @@
 		DURATIONS.find(({ key }) => key === solved.elasticStage)!.label.toLowerCase()
 	);
 
+	/**
+	 * The Style is a reference point, not a cage: every value the user has moved away
+	 * from its Preset is marked with what it used to be, and can be put back.
+	 */
+	const deviations = $derived(deviationsOf(recipe));
+	const modified = $derived(isModified(recipe));
+
+	/**
+	 * The Preset's value for a field, read in the units of the control showing it — or
+	 * nothing at all when the field is still where the Style put it.
+	 */
+	const was = $derived((field: DeviationField): string | undefined => {
+		const value = deviations[field];
+		if (value === undefined) return undefined;
+		if (typeof value === "string") return value === "fresh" ? "Fresh" : "Dry";
+
+		switch (field) {
+			case "count":
+				return String(value);
+			case "ballGrams":
+				return `${value} g`;
+			case "bulkHours":
+			case "coldHours":
+			case "warmUpHours":
+				return formatHours(value);
+			case "roomCelsius":
+			case "fridgeCelsius":
+				return `${value} °C`;
+			// The Leavening reads in the yeast the baker is holding, as its control does —
+			// not in the Style's, so that "was" and "is" are the same unit and comparable
+			// even on a dough whose yeast type has been swapped too.
+			case "leavening":
+				return formatPercent(inYeastType(value, recipe.yeastType));
+			// Hydration, salt, oil and sugar: Baker's Percentages, as the baker says them.
+			default:
+				return formatPercent(value);
+		}
+	});
+
+	/**
+	 * Writes a Recipe the domain handed back over the one the screen is holding.
+	 *
+	 * Field by field, because the screen does not own the object — the parent does, and
+	 * it is what everything here re-solves from.
+	 */
+	function assign(next: Recipe) {
+		const copy = copyRecipe(next);
+		recipe.batch = copy.batch;
+		recipe.percentages = copy.percentages;
+		recipe.yeastType = copy.yeastType;
+		recipe.schedule = copy.schedule;
+		recipe.lock = copy.lock;
+		recipe.freshYeastPercent = copy.freshYeastPercent;
+	}
+
+	function revertField(field: DeviationField) {
+		// A duration can hand the Elastic role over, so bank what it reads first — the
+		// same reason setStageHours does.
+		if (DURATIONS.some((duration) => duration.field === field)) bankElasticStage();
+		assign(revert(recipe, field));
+	}
+
 	function setLock(lock: Lock) {
 		// Whichever side is about to become derived is seeded with what is on screen now,
 		// so flipping the Lock changes nothing until the user moves something.
-		const next = withLock(recipe, lock);
-		recipe.schedule = next.schedule;
-		recipe.freshYeastPercent = next.freshYeastPercent;
-		recipe.lock = next.lock;
+		assign(withLock(recipe, lock));
 	}
 
 	/**
@@ -168,11 +240,14 @@
 	 * again. Without this it would come back holding the number it had before the Lock
 	 * rather than the one that was on screen a moment ago.
 	 */
+	function bankElasticStage() {
+		if (!leaveningLocked) return;
+		const elastic = solved.elasticStage;
+		recipe.schedule[elastic].hours = solved.schedule[elastic].hours;
+	}
+
 	function setStageHours(key: keyof ProofSchedule, hours: number) {
-		if (leaveningLocked) {
-			const elastic = solved.elasticStage;
-			recipe.schedule[elastic].hours = solved.schedule[elastic].hours;
-		}
+		bankElasticStage();
 		recipe.schedule[key].hours = hours;
 	}
 
@@ -188,14 +263,35 @@
 
 <div class="mx-auto max-w-md">
 	<header class="bg-surface/95 border-line sticky top-0 z-10 border-b px-5 pt-3 pb-4 backdrop-blur">
-		<button
-			type="button"
-			class="text-ink-muted -ml-2 flex items-center gap-1 pr-3 text-sm"
-			onclick={onback}
-		>
-			<ChevronLeft class="size-4" aria-hidden="true" />
-			{style.name}
-		</button>
+		<div class="flex items-center gap-2">
+			<button
+				type="button"
+				class="text-ink-muted -ml-2 flex min-w-0 items-center gap-1 pr-1 text-sm"
+				onclick={onback}
+			>
+				<ChevronLeft class="size-4 shrink-0" aria-hidden="true" />
+				<span class="truncate">{style.name}</span>
+			</button>
+
+			<!--
+				The Recipe still names its Style, but it is no longer exactly that Style — and
+				the whole way back to it is one tap away, alongside the name it has left behind.
+			-->
+			{#if modified}
+				<span class="border-line text-ink-muted shrink-0 rounded-full border px-2 py-0.5 text-xs">
+					modified
+				</span>
+
+				<button
+					type="button"
+					class="text-accent -mr-2 ml-auto flex shrink-0 items-center gap-1 pl-2 text-sm"
+					onclick={() => assign(resetToPreset(recipe))}
+				>
+					<RotateCcw class="size-4" aria-hidden="true" />
+					Reset
+				</button>
+			{/if}
+		</div>
 
 		<dl class="mt-1 grid grid-cols-[1fr_auto_auto] items-baseline gap-x-3 gap-y-1">
 			{#each rows as row (row.name)}
@@ -221,14 +317,20 @@
 			<div class="border-line bg-raised flex flex-col gap-4 rounded-2xl border p-4">
 				{#snippet stepper(
 					label: string,
+					field: DeviationField,
 					value: number,
 					suffix: string,
 					step: (by: number) => void,
 					by: number
 				)}
 					<div class="flex items-center justify-between gap-3">
-						<span class="flex flex-col">
-							<span class="font-medium">{label}</span>
+						<span class="flex min-w-0 flex-col">
+							<span class="flex items-center gap-2">
+								<span class="truncate font-medium">{label}</span>
+								{#if was(field) !== undefined}
+									<RevertChip was={was(field)!} {label} onrevert={() => revertField(field)} />
+								{/if}
+							</span>
 							<span class="text-ink-muted text-sm" data-numeric>{value}{suffix}</span>
 						</span>
 						<span class="flex items-center gap-2">
@@ -254,8 +356,15 @@
 					</div>
 				{/snippet}
 
-				{@render stepper("Dough balls", recipe.batch.count, "", stepCount, 1)}
-				{@render stepper("Ball weight", recipe.batch.ballGrams, " g", stepBallGrams, 10)}
+				{@render stepper("Dough balls", "count", recipe.batch.count, "", stepCount, 1)}
+				{@render stepper(
+					"Ball weight",
+					"ballGrams",
+					recipe.batch.ballGrams,
+					" g",
+					stepBallGrams,
+					10
+				)}
 			</div>
 		</section>
 
@@ -274,6 +383,8 @@
 						max={control.max}
 						step={control.step}
 						unit="%"
+						was={was(control.key)}
+						onrevert={() => revertField(control.key)}
 						bind:value={
 							() => recipe.percentages[control.key] * 100,
 							(percent) => (recipe.percentages[control.key] = percent / 100)
@@ -349,6 +460,16 @@
 				recipe.yeastType = value;
 			})}
 
+			{#if was("yeastType") !== undefined}
+				<div class="px-1">
+					<RevertChip
+						was={was("yeastType")!}
+						label="Yeast type"
+						onrevert={() => revertField("yeastType")}
+					/>
+				</div>
+			{/if}
+
 			<div class="border-line bg-raised flex flex-col gap-5 rounded-2xl border p-4">
 				{#if leaveningLocked}
 					<AdjustableValue
@@ -357,6 +478,8 @@
 						max={5}
 						step={0.05}
 						unit="%"
+						was={was("leavening")}
+						onrevert={() => revertField("leavening")}
 						bind:value={
 							() => inYeastType(recipe.freshYeastPercent, recipe.yeastType) * 100,
 							(percent) =>
@@ -449,6 +572,8 @@
 							max={duration.max}
 							step={duration.step}
 							unit=" h"
+							was={was(duration.field)}
+							onrevert={() => revertField(duration.field)}
 							bind:value={
 								() => recipe.schedule[duration.key].hours,
 								(hours) => setStageHours(duration.key, hours)
@@ -467,6 +592,8 @@
 					max={35}
 					step={0.5}
 					unit=" °C"
+					was={was("roomCelsius")}
+					onrevert={() => revertField("roomCelsius")}
 					bind:value={
 						() => recipe.schedule.bulk.celsius,
 						(celsius) => {
@@ -481,6 +608,8 @@
 					max={12}
 					step={0.5}
 					unit=" °C"
+					was={was("fridgeCelsius")}
+					onrevert={() => revertField("fridgeCelsius")}
 					bind:value={recipe.schedule.cold.celsius}
 				/>
 			</div>

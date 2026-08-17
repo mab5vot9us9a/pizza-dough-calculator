@@ -86,6 +86,26 @@ export function styleById(id: StyleId): Style {
 	return style;
 }
 
+/**
+ * A Recipe that shares nothing with the one it was copied from.
+ *
+ * Recipes are handed around as values — solved, reverted, reset, encoded — so the
+ * one deep copy every caller needs lives here rather than being written out again
+ * each time a nested Stage or the Batch has to come along.
+ */
+export function copyRecipe(recipe: Recipe): Recipe {
+	return {
+		...recipe,
+		batch: { ...recipe.batch },
+		percentages: { ...recipe.percentages },
+		schedule: {
+			bulk: { ...recipe.schedule.bulk },
+			cold: { ...recipe.schedule.cold },
+			warmUp: { ...recipe.schedule.warmUp },
+		},
+	};
+}
+
 /** Seeds a fresh Recipe from a Style's Preset. */
 export function recipeFromStyle(style: Style): Recipe {
 	return {

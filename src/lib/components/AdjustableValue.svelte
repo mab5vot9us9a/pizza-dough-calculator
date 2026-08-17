@@ -1,4 +1,6 @@
 <script lang="ts">
+	import RevertChip from "$lib/components/RevertChip.svelte";
+
 	/**
 	 * The one control for every adjustable number in the app.
 	 *
@@ -17,9 +19,13 @@
 		step: number;
 		/** Appended to the readout, e.g. "%" or " g". */
 		unit?: string;
+		/** The Preset's reading, when this value has deviated from it. */
+		was?: string;
+		/** Puts the Preset's value back. Offered only alongside a `was`. */
+		onrevert?: () => void;
 	}
 
-	let { label, value = $bindable(), min, max, step, unit = "" }: Props = $props();
+	let { label, value = $bindable(), min, max, step, unit = "", was, onrevert }: Props = $props();
 
 	const uid = $props.id();
 
@@ -56,7 +62,12 @@
 
 <div class="flex flex-col gap-1">
 	<div class="flex items-center justify-between gap-3">
-		<span id="{uid}-label" class="font-medium">{label}</span>
+		<span class="flex min-w-0 items-center gap-2">
+			<span id="{uid}-label" class="truncate font-medium">{label}</span>
+			{#if was !== undefined && onrevert}
+				<RevertChip {was} {label} {onrevert} />
+			{/if}
+		</span>
 
 		{#if typing}
 			<!-- inputmode, not type="number": it raises the decimal keypad without the
