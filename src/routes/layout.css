@@ -11,7 +11,9 @@
 		ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
 	--font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
 
-	/* Warm, flour-and-crust palette. Overridden below for dark mode. */
+	/* Warm, flour-and-crust palette. Overridden below for dark mode. The surface colour
+	 * is mirrored by hand in app.html's theme-color and in static/manifest.webmanifest,
+	 * neither of which can read a custom property; this is where it is decided. */
 	--color-surface: #faf6f0;
 	--color-raised: #ffffff;
 	--color-sunken: #f1e9de;
