@@ -743,3 +743,32 @@ state of its own. The svelte/no-navigation-without-resolve rule is silenced at t
 call with the reason in a comment: this is the current URL with a different
 fragment, not a route to resolve. check, lint, test:unit (67) and build clean.
 Committed as f926f09.
+
+
+Follow-up 2 — 2026-08-18 — the router has to be ready first, and the app has now
+been run in a browser
+-----------------------------------------------------------------------------
+
+The switch to $app/navigation's replaceState (f926f09) broke the first write. The
+router is only ready once hydration has finished, and onMount is part of
+hydration: dev threw "Cannot call replaceState(...) before router is initialized",
+and the production build crashed reading `$set` on undefined router internals — so
+the built app rendered nothing after picking a Style. Deferring by a task
+(setTimeout) fixed dev and still crashed prod. The write now waits for
+`afterNavigate` plus one microtask, because the router marks itself started
+immediately after announcing that first navigation. localStorage still writes on
+the first pass; only the URL waits. Committed as b0310c8.
+
+AND THE STANDING "NOT VERIFIED IN A BROWSER" NOTE IS PARTLY DISCHARGED. Driven in
+Chrome against both `pnpm dev` and a built `pnpm preview`:
+  - the Style picker renders and picking a Style opens the Workbench;
+  - dragging the Hydration slider updates the weights and rewrites the hash live;
+  - history stays one entry deep across many drags (replaceState, not push);
+  - a reload with no hash restores the session from localStorage, hash and all;
+  - opening a hash link loads that dough;
+  - in the built app the service worker registers, precaches 18 entries including
+    `/`, controls the page, and the manifest parses with display: standalone and
+    four icons;
+  - no console errors anywhere in the above.
+Still unverified: anything iOS — home-screen install, the datetime-local picker,
+real offline with the network actually cut, and touch rather than a mouse.
