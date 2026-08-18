@@ -729,3 +729,17 @@ Notes for the next iteration
 - CONTEXT.md still has no glossary entry for Session or for the encoded Recipe
   (Iteration 8's note). Worth a /domain-modeling pass before calling v1 done.
 - Untracked/modified and not mine: .scratch/ralph/ralph-once.sh.
+
+
+Follow-up — 2026-08-18 — session.ts writes the hash through the router
+----------------------------------------------------------------------
+
+src/lib/session.ts used the History API directly (Iteration 8, showInUrl).
+SvelteKit's router keeps its own bookkeeping — history index, navigation index,
+page state — inside the history entry's state object, so writing over it by hand
+breaks the router, and the dev build warns about exactly this. Now uses
+`replaceState` from $app/navigation, passing `{}` because the app carries no page
+state of its own. The svelte/no-navigation-without-resolve rule is silenced at the
+call with the reason in a comment: this is the current URL with a different
+fragment, not a route to resolve. check, lint, test:unit (67) and build clean.
+Committed as f926f09.
