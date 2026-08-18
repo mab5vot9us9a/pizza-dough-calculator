@@ -2,6 +2,7 @@
 	import { clockTimes, formatClockTime } from "$lib/bake-time";
 	import AdjustableValue from "$lib/components/AdjustableValue.svelte";
 	import RevertChip from "$lib/components/RevertChip.svelte";
+	import ShareLink from "$lib/components/ShareLink.svelte";
 	import {
 		type DeviationField,
 		type Lock,
@@ -281,16 +282,23 @@
 				<span class="border-line text-ink-muted shrink-0 rounded-full border px-2 py-0.5 text-xs">
 					modified
 				</span>
-
-				<button
-					type="button"
-					class="text-accent -mr-2 ml-auto flex shrink-0 items-center gap-1 pl-2 text-sm"
-					onclick={() => assign(resetToPreset(recipe))}
-				>
-					<RotateCcw class="size-4" aria-hidden="true" />
-					Reset
-				</button>
 			{/if}
+
+			<span class="ml-auto flex shrink-0 items-center gap-3">
+				{#if modified}
+					<button
+						type="button"
+						class="text-accent flex shrink-0 items-center gap-1 pl-2 text-sm"
+						onclick={() => assign(resetToPreset(recipe))}
+					>
+						<RotateCcw class="size-4" aria-hidden="true" />
+						Reset
+					</button>
+				{/if}
+
+				<!-- The dough is already in the address bar; this is only how it gets sent. -->
+				<ShareLink />
+			</span>
 		</div>
 
 		<dl class="mt-1 grid grid-cols-[1fr_auto_auto] items-baseline gap-x-3 gap-y-1">

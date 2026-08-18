@@ -3,8 +3,10 @@
  *
  * `solve()` is the whole interface for computation: the Anchor arithmetic, the
  * ferment model and the rounding live behind it and are deliberately not exported.
+ * Alongside it, the codec is the whole interface for writing a Recipe down.
  */
 export * from "./types";
+export { decodeRecipe, encodeRecipe } from "./codec";
 export {
 	type DeviationField,
 	type DeviationValue,
