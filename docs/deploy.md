@@ -62,6 +62,17 @@ owning it is the reason for a purpose-built image.
 | `COOLIFY_TOKEN`    | the deploy-scoped API token from step 2                            |
 | `COOLIFY_APP_UUID` | the resource UUID from step 6                                      |
 
+## Pruning old images
+
+`.github/workflows/cleanup.yml` runs weekly and keeps the five most recent `sha-` tags, excluding
+`latest`. Run it manually from the Actions tab with **dry-run** ticked to see what it would remove;
+scheduled runs delete.
+
+This is hygiene rather than a quota measure — GHCR storage and bandwidth are free for public
+packages, and this package is public. The useful bound is "builds I might roll back to". If the
+package is ever made private, the same workflow becomes the thing keeping it inside the storage
+allowance.
+
 ## Rolling back
 
 Every deploy also publishes an immutable `sha-<short>` tag. Coolify pulls `latest`, so to roll back,

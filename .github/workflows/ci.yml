@@ -3,16 +3,19 @@ name: CI
 
 on:
   pull_request:
-  push:
-    branches: [main]
-  # Called by deploy.yml so main is never shipped unchecked.
+  # Called by deploy.yml so main is never shipped unchecked. Deliberately not triggered by
+  # `push` to main as well: that would start a second, independent run of this same workflow
+  # alongside the one deploy.yml calls, and the two would land in the same concurrency group
+  # and cancel each other.
   workflow_call:
 
 permissions:
   contents: read
 
+# Scoped by workflow as well as ref. When deploy.yml calls this, `github.workflow` is the
+# caller's name, so a gate run can never share a group with anything else.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
