@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+	<title>Pizza Dough</title>
+	<!-- Full-bleed background: Android masks this icon to whatever shape the launcher
+	     wants, so the artwork stays inside the central 80% safe zone. -->
+	<rect width="512" height="512" fill="#c0392b" />
+	<circle cx="256" cy="256" r="168" fill="#f1e0c5" />
+	<circle cx="256" cy="256" r="140" fill="#f0c063" />
+	<circle cx="212" cy="212" r="26" fill="#a12b20" />
+	<circle cx="308" cy="238" r="22" fill="#a12b20" />
+	<circle cx="246" cy="312" r="24" fill="#a12b20" />
+</svg>

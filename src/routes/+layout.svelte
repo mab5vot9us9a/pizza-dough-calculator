@@ -1,10 +1,13 @@
 <script lang="ts">
-	import favicon from "$lib/assets/favicon.svg";
+	import { onMount } from "svelte";
+
+	import { registerServiceWorker } from "$lib/pwa";
 
 	import "./layout.css";
 
 	let { children } = $props();
+
+	onMount(registerServiceWorker);
 </script>
 
-<svelte:head><link rel="icon" href={favicon} /></svelte:head>
 {@render children()}

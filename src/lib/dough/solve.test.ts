@@ -1,0 +1,290 @@
+import { describe, expect, it } from "vitest";
+
+import { solve, withLock } from "./solve";
+import { STYLES, recipeFromStyle, styleById } from "./styles";
+import { FRESH_PER_DRY, type SolvedRecipe } from "./types";
+
+describe("the Anchor", () => {
+	it("gives the Neapolitan Preset the Total Dough Weight it asked for", () => {
+		const solved = solve(recipeFromStyle(styleById("neapolitan")));
+
+		// Four balls of 250 g. A 62% Hydration dough of this size is a shade over
+		// 600 g of flour and a shade under 380 g of water.
+		expect(solved.totalGrams).toBe(1000);
+		expect(solved.flour).toBeGreaterThan(590);
+		expect(solved.flour).toBeLessThan(615);
+		expect(solved.water).toBeGreaterThan(365);
+		expect(solved.water).toBeLessThan(385);
+	});
+
+	it("holds the Total Dough Weight when Hydration changes, trading flour for water", () => {
+		const recipe = recipeFromStyle(styleById("neapolitan"));
+		const wetter = { ...recipe, percentages: { ...recipe.percentages, hydration: 0.75 } };
+
+		const before = solve(recipe);
+		const after = solve(wetter);
+
+		expect(after.totalGrams).toBe(before.totalGrams);
+		expect(after.water).toBeGreaterThan(before.water);
+		expect(after.flour).toBeLessThan(before.flour);
+	});
+
+	it("gives the user exactly the Dough Balls they asked for", () => {
+		const recipe = recipeFromStyle(styleById("sheet-pan"));
+		const solved = solve({ ...recipe, batch: { count: 6, ballGrams: 320 } });
+
+		expect(solved.totalGrams).toBe(1920);
+	});
+});
+
+describe("yeast type", () => {
+	it("reports a third of the weight when the same dough is made with dry yeast", () => {
+		const fresh = recipeFromStyle(styleById("neapolitan"));
+		const dry = { ...fresh, yeastType: "dry" as const };
+
+		// The baker swaps the block for the sachet; the dough ferments the same, so the
+		// sachet is a third of the weight.
+		expect(solve(fresh).yeast / solve(dry).yeast).toBeCloseTo(3, 1);
+	});
+
+	it("leaves the rest of the Recipe alone when the yeast type changes", () => {
+		const dry = recipeFromStyle(styleById("new-york"));
+		const fresh = { ...dry, yeastType: "fresh" as const };
+
+		const before = solve(dry);
+		const after = solve(fresh);
+
+		// Nothing the user asked for changes: it is the same dough at the same
+		// percentages, on the same schedule, at the same Total Dough Weight.
+		expect(after.percentages).toEqual(before.percentages);
+		expect(after.totalGrams).toBe(before.totalGrams);
+		expect(after.schedule).toEqual(before.schedule);
+
+		// The other weights do drift, and cannot not: the Total Dough Weight is the
+		// Anchor (ADR-0001), so the ~3 g of extra mass in a block of fresh yeast has to
+		// come out of the rest of the dough. Flour gives up those grams, and the
+		// ingredients measured off it shed a tenth. It is under half a percent.
+		const displaced = before.flour + before.water - (after.flour + after.water);
+		expect(displaced).toBeGreaterThan(0);
+		expect(displaced).toBeLessThan(0.005 * before.totalGrams);
+		for (const [now, then] of [
+			[after.salt, before.salt],
+			[after.oil, before.oil],
+			[after.sugar, before.sugar],
+		]) {
+			expect(Math.abs(now - then)).toBeLessThanOrEqual(0.1);
+		}
+	});
+});
+
+describe("the ferment model", () => {
+	// The Leavening a baker would recognise: a pinch, not a spoonful, and never zero.
+	// Published doughs on schedules like these call for something between a fifth of a
+	// percent of fresh yeast and two percent, so that is the band each Preset must land
+	// in — wide enough not to pin the constants ADR-0002 expects to be retuned, tight
+	// enough to fail if they move by the threefold that Q10 = 2 would have cost.
+	it.each([...STYLES])("gives $name's Preset schedule a plausible Leavening", (style) => {
+		const solved = solve(recipeFromStyle(style));
+
+		// Compared as fresh yeast, so the four dry-yeast Styles are in the same units.
+		const freshPercent = solved.yeastPercent * (solved.yeastType === "fresh" ? 1 : FRESH_PER_DRY);
+
+		expect(freshPercent * 100).toBeGreaterThan(0.2);
+		expect(freshPercent * 100).toBeLessThan(2);
+	});
+
+	it("needs less yeast in a warm kitchen than a cold one", () => {
+		const preset = recipeFromStyle(styleById("same-day"));
+		const inFebruary = {
+			...preset,
+			schedule: { ...preset.schedule, bulk: { hours: 5, celsius: 16 } },
+		};
+		const inAugust = {
+			...preset,
+			schedule: { ...preset.schedule, bulk: { hours: 5, celsius: 28 } },
+		};
+
+		expect(solve(inAugust).yeast).toBeLessThan(solve(inFebruary).yeast);
+	});
+
+	it("needs less yeast for a longer proof", () => {
+		const recipe = recipeFromStyle(styleById("neapolitan"));
+		const longer = {
+			...recipe,
+			schedule: { ...recipe.schedule, cold: { hours: 48, celsius: 4 } },
+		};
+
+		expect(solve(longer).yeast).toBeLessThan(solve(recipe).yeast);
+	});
+
+	// A Stage with no hours is absent, not a special case: giving the Same-day Style a
+	// zero-length Cold Proof at any temperature is the same dough it already was.
+	it("ignores a Stage with a zero duration", () => {
+		const sameDay = recipeFromStyle(styleById("same-day"));
+		const withEmptyCold = {
+			...sameDay,
+			schedule: { ...sameDay.schedule, cold: { hours: 0, celsius: 4 } },
+		};
+
+		expect(solve(withEmptyCold).yeast).toBe(solve(sameDay).yeast);
+	});
+
+	// Temperature is the whole reason the model exists: a day in the fridge is worth
+	// only a few hours on the worktop, so it cannot be counted hour for hour.
+	it("counts an hour in the fridge for less than an hour at room temperature", () => {
+		const recipe = recipeFromStyle(styleById("neapolitan"));
+		const anotherColdHour = {
+			...recipe,
+			schedule: { ...recipe.schedule, cold: { hours: 25, celsius: 4 } },
+		};
+		const anotherRoomHour = {
+			...recipe,
+			schedule: { ...recipe.schedule, bulk: { hours: 3, celsius: 20 } },
+		};
+
+		const saved = (later: typeof recipe) => solve(recipe).yeast - solve(later).yeast;
+		expect(saved(anotherColdHour)).toBeLessThan(saved(anotherRoomHour));
+	});
+});
+
+describe("the Lock", () => {
+	it("derives the Leavening from the Proof Schedule while the schedule is locked", () => {
+		const recipe = recipeFromStyle(styleById("neapolitan"));
+		const longer = {
+			...recipe,
+			schedule: { ...recipe.schedule, cold: { hours: 48, celsius: 4 } },
+		};
+
+		// The stored Leavening is stale on purpose: the locked side is the one that wins.
+		const solved = solve({ ...longer, freshYeastPercent: 0.05 });
+
+		expect(solved.schedule).toEqual(longer.schedule);
+		expect(solved.yeastPercent).toBeLessThan(0.05);
+	});
+
+	it("derives the Cold Proof from the Leavening while the Leavening is locked", () => {
+		const preset = recipeFromStyle(styleById("neapolitan"));
+		const locked = withLock(preset, "leavening");
+
+		// Twice the yeast on the same dough: it is ready in less time, and the fridge
+		// is where the time comes off.
+		const impatient = solve({ ...locked, freshYeastPercent: locked.freshYeastPercent * 2 });
+
+		expect(impatient.schedule.cold.hours).toBeLessThan(preset.schedule.cold.hours);
+		expect(impatient.schedule.bulk).toEqual(preset.schedule.bulk);
+		expect(impatient.schedule.warmUp).toEqual(preset.schedule.warmUp);
+	});
+
+	it("moves the Cold Proof the other way when the Leavening is cut", () => {
+		const locked = withLock(recipeFromStyle(styleById("new-york")), "leavening");
+		const scarce = solve({ ...locked, freshYeastPercent: locked.freshYeastPercent / 2 });
+
+		expect(scarce.schedule.cold.hours).toBeGreaterThan(48);
+	});
+
+	it("stretches the Bulk instead on a Style with no Cold Proof", () => {
+		const preset = recipeFromStyle(styleById("same-day"));
+		const locked = withLock(preset, "leavening");
+		const scarce = solve({ ...locked, freshYeastPercent: locked.freshYeastPercent / 2 });
+
+		expect(scarce.schedule.bulk.hours).toBeGreaterThan(preset.schedule.bulk.hours);
+		expect(scarce.schedule.cold.hours).toBe(0);
+	});
+
+	it.each([...STYLES])("round-trips $name through both Locks", (style) => {
+		const preset = recipeFromStyle(style);
+		const byLeavening = withLock(preset, "leavening");
+		const backToSchedule = withLock(byLeavening, "schedule");
+
+		// Locking the Leavening takes the figure the schedule was already asking for, so
+		// the schedule it derives is the one the baker started with, and the Leavening it
+		// hands back is unchanged.
+		expect(solve(byLeavening).schedule.bulk.hours).toBeCloseTo(preset.schedule.bulk.hours, 6);
+		expect(solve(byLeavening).schedule.cold.hours).toBeCloseTo(preset.schedule.cold.hours, 6);
+		expect(solve(backToSchedule).yeast).toBe(solve(preset).yeast);
+	});
+
+	// The point of the Lock: a combination that cannot work is unreachable. Ask for a
+	// spoonful of yeast on a 24-hour cold proof and the fridge time goes away, rather
+	// than the app computing a negative duration and reporting a dough that blew out.
+	it("drives the Elastic Stage to zero rather than negative when there is too much yeast", () => {
+		const locked = withLock(recipeFromStyle(styleById("neapolitan")), "leavening");
+		const drowned = solve({ ...locked, freshYeastPercent: 0.05 });
+
+		expect(drowned.schedule.cold.hours).toBe(0);
+		expect(drowned.schedule.bulk).toEqual(locked.schedule.bulk);
+	});
+
+	it("names the Cold Proof as Elastic when there is one and the Bulk when there is not", () => {
+		expect(solve(recipeFromStyle(styleById("neapolitan"))).elasticStage).toBe("cold");
+		expect(solve(recipeFromStyle(styleById("same-day"))).elasticStage).toBe("bulk");
+	});
+
+	// Flipping the Lock must not move the dough under the baker's hands: whichever side
+	// becomes derived is first written with what was on screen a moment ago.
+	it("carries the values across when the Lock flips", () => {
+		const edited = recipeFromStyle(styleById("sheet-pan"));
+		edited.schedule.cold.hours = 36;
+
+		const locked = withLock(edited, "leavening");
+
+		expect(locked.freshYeastPercent).toBeCloseTo(solve(edited).yeastPercent * FRESH_PER_DRY, 9);
+		expect(solve(locked).schedule.cold.hours).toBeCloseTo(36, 6);
+	});
+});
+
+/**
+ * Adds the displayed weights the way a reader does — in tenths of a gram, so the
+ * assertion is about the decimals on screen and not about binary floating point.
+ */
+const sumOfWeights = (solved: SolvedRecipe) =>
+	[solved.flour, solved.water, solved.salt, solved.oil, solved.sugar, solved.yeast].reduce(
+		(tenths, weight) => tenths + Math.round(weight * 10),
+		0
+	) / 10;
+
+describe("rounding", () => {
+	it.each([...STYLES])("$name's weights add up to the Total Dough Weight", (style) => {
+		const solved = solve(recipeFromStyle(style));
+
+		expect(sumOfWeights(solved)).toBe(solved.totalGrams);
+	});
+
+	it("keeps the small ingredients to a tenth of a gram", () => {
+		const solved = solve(recipeFromStyle(styleById("new-york")));
+
+		for (const weight of [solved.salt, solved.oil, solved.sugar, solved.yeast]) {
+			expect(weight * 10).toBe(Math.round(weight * 10));
+		}
+	});
+
+	// Awkward Batches are where the drift flour has to absorb is largest: a Total
+	// Dough Weight that divides badly, and enough ingredients to round.
+	it.each([
+		{ count: 3, ballGrams: 267 },
+		{ count: 7, ballGrams: 133 },
+		{ count: 1, ballGrams: 111 },
+		{ count: 11, ballGrams: 249 },
+	])("adds up for an awkward Batch of $count × $ballGrams g", (batch) => {
+		const recipe = { ...recipeFromStyle(styleById("new-york")), batch };
+		const solved = solve(recipe);
+
+		expect(sumOfWeights(solved)).toBe(batch.count * batch.ballGrams);
+	});
+
+	// The one place a weight is finer than its stated precision, and deliberately so:
+	// flour is the drift absorber, so the tenths the small ingredients round away end
+	// up here rather than making the column disagree with the Total Dough Weight.
+	it("lets flour carry the tenth the rest of the column rounded away", () => {
+		const solved = solve(recipeFromStyle(styleById("neapolitan")));
+
+		expect(solved.flour).toBe(603.6);
+		expect(sumOfWeights(solved)).toBe(1000);
+	});
+
+	it("keeps water whole", () => {
+		const solved = solve(recipeFromStyle(styleById("new-york")));
+
+		expect(solved.water).toBe(Math.round(solved.water));
+	});
+});

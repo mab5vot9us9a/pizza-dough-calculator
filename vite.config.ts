@@ -1,4 +1,4 @@
-import adapter from "@sveltejs/adapter-node";
+import adapter from "@sveltejs/adapter-static";
 import { sveltekit } from "@sveltejs/kit/vite";
 
 import tailwindcss from "@tailwindcss/vite";
@@ -14,6 +14,9 @@ export default defineConfig({
 					filename.split(/[/\\]/).includes("node_modules") ? undefined : true,
 			},
 			adapter: adapter(),
+			// Registered by hand in +layout.svelte, so `pnpm dev` runs with no service
+			// worker at all rather than one caching a moving target.
+			serviceWorker: { register: false },
 		}),
 	],
 	test: {

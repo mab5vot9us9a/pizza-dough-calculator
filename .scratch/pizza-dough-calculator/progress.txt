@@ -1,0 +1,774 @@
+Pizza Dough Calculator — v1 · progress log
+==========================================
+
+Iteration 1 — 2026-08-16 — Issue 01: Clear the scaffold  [DONE]
+---------------------------------------------------------------
+
+What I did
+- Deleted the SvelteKit scaffold: src/routes/demo/**, src/lib/vitest-examples/**,
+  src/lib/index.ts, playwright.config.ts. Dropped @playwright/test and the test:e2e
+  script (PRD puts Playwright out of scope).
+- Rewrote README.md — it was still the generic `sv` scaffold text.
+- Finished the ADR-0006 adapter swap. vite.config.ts still imported
+  @sveltejs/adapter-node even though package.json already carried adapter-static;
+  the build could not have worked. Added src/routes/+layout.ts with
+  `prerender = true`, so `pnpm build` now writes a static site to ./build.
+- Put the mobile-first foundations in src/routes/layout.css and src/app.html:
+  warm light/dark palette as Tailwind 4 @theme tokens, 17px body text,
+  --tap-target: 3rem applied to buttons/selects/inputs by default, tabular
+  figures, safe-area padding, viewport-fit=cover, theme-color, iOS web-app meta.
+- Replaced the placeholder home page with a minimal branded landing card
+  (Issue 02 replaces it with the Style picker).
+
+Key decisions and reasoning
+- test:unit is now `vitest --run --passWithNoTests`; test:unit:watch keeps watch
+  mode. Reason: the acceptance criteria require `pnpm test:unit` to pass, and with
+  the example spec deleted the suite is empty and vitest's watch mode never exits.
+  It is the gate command, so it must be non-interactive.
+- Ran a one-off `pnpm format` across the repo. The committed docs/ADRs were not
+  prettier-clean, so `pnpm lint` failed for reasons unrelated to this ticket. Costs
+  a reflow diff in 11 markdown files once; every later ticket gets a green lint.
+- Design tokens live in layout.css rather than a component. Dark mode is a
+  prefers-color-scheme override of the same custom properties Tailwind emits, so
+  utilities (bg-surface, text-ink-muted, …) work in both schemes with no dark:
+  variants scattered through the markup.
+- The tap-target rule excludes range/checkbox/radio so the shared slider component
+  from Issue 03 can size itself.
+- No tests added. The PRD names exactly two test seams — the solver and the URL
+  codec — and neither exists yet.
+
+Files changed
+  A  src/routes/+layout.ts
+  M  src/app.html, src/routes/layout.css, src/routes/+page.svelte
+  M  vite.config.ts (adapter-node -> adapter-static)
+  M  package.json, pnpm-lock.yaml, README.md
+  D  playwright.config.ts, src/lib/index.ts,
+     src/lib/vitest-examples/**, src/routes/demo/**
+  M  CLAUDE.md, CONTEXT.md, docs/** (formatting only)
+
+Verification
+  pnpm build     ok — ./build contains index.html, _app/, robots.txt
+  pnpm check     0 errors, 0 warnings
+  pnpm lint      clean
+  pnpm test:unit passes (no test files yet)
+
+Notes for the next iteration
+- Next up: Issue 02 — pick a Style, see the weights. That needs the Style presets
+  and `solve()` in src/lib/dough/ (types.ts is already committed) plus the solver
+  test suite, which is the first real use of the test gate.
+- There is no svelte.config.js in this repo; SvelteKit config, including the
+  adapter, lives inside the sveltekit() plugin options in vite.config.ts.
+- No web app manifest or service worker yet — that is Issue 09. app.html already
+  carries the iOS home-screen meta tags.
+- Untracked/modified files under .scratch/ralph/ are not mine and were left alone.
+
+
+Iteration 2 — 2026-08-16 — Issue 02: Pick a Style, see the weights  [DONE]
+--------------------------------------------------------------------------
+
+What I did
+- Built the domain module in src/lib/dough/: styles.ts (five Presets), solve.ts
+  (the Anchor arithmetic and rounding), index.ts (the public barrel), and
+  solve.test.ts. Added `percentages` to SolvedRecipe and `freshYeastPercent` to
+  Style, both required by the ticket.
+- Built the two screens: StylePicker.svelte lists the five Styles with names,
+  blurbs and default Batch; Workbench.svelte holds the solved weights in a
+  sticky header with Baker's Percentages, plus Batch steppers and the Style's
+  bake string. +page.svelte switches between them.
+- Wrote src/lib/format.ts for gram and percentage display.
+- 15 tests, written red-green one slice at a time against solve() — the seam the
+  PRD pre-agreed. Coverage: the Anchor, Hydration trading flour for water, the
+  summing rule across all five Styles, four awkward Batch sizes, and the
+  per-ingredient rounding units.
+
+Key decisions and reasoning
+- FLOUR CARRIES A TENTH OF A GRAM. Two acceptance criteria contradict each
+  other: flour cannot be whole and also absorb the rounding drift, because the
+  tenths the small ingredients round away have to land somewhere. Neapolitan:
+  water 375 + salt 16.9 + yeast 4.5 leaves flour at 603.6; rounding it to 604
+  makes four 250 g balls read 1000.4 g. Kept exact summing, per the ticket's own
+  ranking ("a column that doesn't add up ... reads as a bug"). Pinned by a named
+  test, commented at the rounding site, and written up in the issue file. The
+  alternative — put the tenth on water — is a one-line change if the display
+  work later prefers it. Either way one of the two rules gives.
+- Placeholder yeast percentages are not arbitrary. Each is what the ADR-0002
+  ferment model (6 / activity) produces for that Preset's own schedule, so the
+  numbers will not jump when Issue 04 replaces the literals with the model.
+- Oil and sugar rows are gated on the *Preset's* value, not the live Recipe's,
+  so zeroing the oil on a New York in Issue 03 does not make the control vanish.
+- Leavening in the solver's denominator is the yeast type the user actually
+  weighs out (dry = fresh / 3), not the stored fresh-yeast figure — otherwise a
+  dry-yeast dough would be short on flour.
+- solve() does not consult recipe.lock yet; commented as such. Ticket 02
+  explicitly defers the ferment model, so the lock is inert machinery for now.
+- Batch is adjusted with steppers, not typed entry. The shared slider with
+  tappable numeric entry is Issue 03's component and every adjustable value
+  should use it rather than growing a one-off here first.
+
+Files changed
+  A  src/lib/dough/{styles,solve,index}.ts, src/lib/dough/solve.test.ts
+  A  src/lib/format.ts
+  A  src/lib/components/{StylePicker,Workbench}.svelte
+  M  src/lib/dough/types.ts (Style.freshYeastPercent, SolvedRecipe.percentages)
+  M  src/routes/+page.svelte (landing card -> the two screens)
+
+Verification
+  pnpm test:unit  15 passed
+  pnpm check      0 errors, 0 warnings
+  pnpm lint       clean
+  pnpm build      ok
+  Reviewed on both axes (standards + spec) before committing; the flour-rounding
+  conflict above is the only finding not simply fixed.
+
+Notes for the next iteration
+- Next up: Issue 03 — adjust the Recipe freely. That is the shared slider plus
+  tappable numeric entry, used for Hydration, salt, oil and sugar. Workbench.svelte
+  is where it lands; the sticky header already re-solves on any Recipe mutation.
+- Recipe state lives as a plain $state object in +page.svelte and is mutated in
+  place by Workbench. Persistence (Issue 08) will want to wrap that.
+- The two review sub-agents both flagged the fresh/dry ternary appearing in both
+  solve.ts and Workbench.svelte. Two sites is not yet worth a helper; if Issue 05
+  adds a third, extract a yeast label/conversion helper then.
+- Still untouched and not mine: .scratch/ralph/ralph-once.sh.
+
+
+Iteration 3 — 2026-08-16 — Issue 03: Adjust the Recipe freely  [DONE]
+---------------------------------------------------------------------
+
+What I did
+- Built src/lib/components/AdjustableValue.svelte, the one control every
+  adjustable number in the app will use: a range slider plus a readout that
+  becomes a decimal-keypad field when tapped. Committed to its interface first,
+  since Issues 04–06 bind proof hours and temperatures to it.
+- Wired Hydration, salt, oil and sugar through it in Workbench.svelte, and added
+  a fresh/dry yeast segmented control.
+- Added two solver tests covering the yeast type swap. The Hydration test the
+  ticket asks for already existed from Iteration 2.
+- 17 tests. check, lint and build all clean; dev server smoke-tested.
+
+Key decisions and reasoning
+- THE YEAST TOGGLE CANNOT "CHANGE NOTHING ELSE". Second acceptance criteria
+  collision in a row, same root as Iteration 2's. Fresh yeast weighs 3× dry, the
+  Total Dough Weight is the Anchor, so swapping types moves ~3 g of mass that
+  flour has to give up; the ingredients measured off flour shed a tenth with it.
+  Under half a percent, and unavoidable short of breaking the column's sum. The
+  test asserts what genuinely holds — percentages, schedule, total identical,
+  yeast ratio 3 — then pins the drift below 0.5% of the batch so it fails if it
+  ever grows. Written up in full in the issue file.
+- The control is unit-agnostic: it moves a number between min and max and knows
+  nothing about Baker's Percentages. The Workbench binds through a getter/setter
+  pair (Svelte 5 function bindings) to convert fraction to percent. Cost is one
+  conversion at four call sites; benefit is that hours and °C bind directly with
+  no conversion at all in the next tickets.
+- Ranges are wide (Hydration 40–110%, oil 0–30%) so the ends are somewhere no
+  one arrives at by accident, not somewhere the app stops them. Typed values
+  clamp into range rather than being rejected — the alternative is the slider
+  and the number disagreeing.
+- Step is per-control: 0.5 for Hydration, 0.1 for the small ingredients. A
+  uniform 0.5 would have made Neapolitan's 2.8% salt unreachable by dragging.
+- inputmode="decimal" on a text input, not type="number": it raises the right
+  keypad without spinner arrows, and the draft can stay a string mid-edit.
+  Commas are read as decimal points — a German keyboard offers a comma.
+- Extracted presetUses() after the standards review flagged the "does this Style
+  use oil/sugar" rule written twice, once per-field in the weights table and
+  once generically for the controls.
+
+Files changed
+  A  src/lib/components/AdjustableValue.svelte
+  M  src/lib/components/Workbench.svelte
+  M  src/lib/dough/solve.test.ts
+
+Verification
+  pnpm test:unit  17 passed
+  pnpm check      0 errors, 0 warnings
+  pnpm lint       clean
+  pnpm build      ok
+  pnpm dev        page renders, 200
+  Reviewed on both axes before committing. Standards found one duplication
+  (fixed above); Spec found only the yeast-toggle conflict.
+
+Notes for the next iteration
+- Next up: Issue 04 — the Proof Schedule and the ferment model. That replaces the
+  literal freshYeastPercent in styles.ts with 6 / activity, and makes solve()
+  finally consult recipe.lock. The schedule Stage controls are AdjustableValue
+  with unit=" h" and " °C" and no conversion in the binding.
+- The fresh/dry ternary the last iteration flagged now appears in three places
+  (solve.ts, the weights table, YEAST_TYPES). Issue 04 or 05 should extract a
+  yeast label/conversion helper — the threshold agreed last time is reached.
+- No interaction test exists for AdjustableValue and none is planned: the PRD
+  names exactly two test seams and component tests are out of scope. NOT YET
+  VERIFIED IN A BROWSER — the component compiles, type-checks, passes the Svelte
+  autofixer and the page renders server-side, but no one has dragged the slider
+  or tapped the readout. Worth two minutes on a phone before Issue 04 builds
+  more controls on top of it.
+- Untracked/modified and not mine: .scratch/ralph/ralph-once.sh, and a
+  md:flex-row tweak in StylePicker.svelte that appeared mid-iteration. Both left
+  alone and uncommitted.
+
+
+Iteration 4 — 2026-08-16 — Issue 04: Proof Schedule and the ferment model  [DONE]
+---------------------------------------------------------------------------------
+
+What I did
+- Added src/lib/dough/ferment.ts: the Q10 rate law from ADR-0002. Activity is
+  Σ hours × 3^((celsius − 20) / 10) across the Stages; the Leavening a schedule
+  asks for is the target divided by that. Not re-exported from the barrel.
+- Deleted Style.freshYeastPercent and the five literals in styles.ts. The Preset
+  no longer carries a Leavening figure — it is what its own schedule asks for.
+  recipeFromStyle seeds Recipe.freshYeastPercent from the model instead.
+- solve() now consults recipe.lock: with the schedule locked (always, for now)
+  the Leavening comes from the model. The lock === "leavening" branch takes the
+  stored figure as-is; the Elastic Stage is Issue 05.
+- Workbench: a Proof section with the schedule as an ordered list of the Stages
+  the dough actually passes through, ending at the Style's bake string, over
+  five AdjustableValue controls — three durations, room temp, fridge temp. The
+  standalone Bake section is gone; the bake line now closes the list.
+- Added formatHours to src/lib/format.ts.
+- 26 tests (was 17). All of check, lint, build and test:unit clean.
+
+Key decisions and reasoning
+- K IS IN PERCENTAGE POINTS. ADR-0002 writes "leavening% × activity = 6" with
+  Leavening counted in percentage points; the code holds every Baker's
+  Percentage as a fraction. The constant is therefore 6/100, and the first run
+  without it put 184 g of yeast in a 1000 g dough. Commented at the constant.
+  Confirmed correct by the five Presets solving to exactly the placeholder
+  figures Iteration 2 wrote down (Neapolitan 0.737%, Same-day 0.963%, …), so
+  nothing moved when the model replaced the literals.
+- ONE ROOM TEMPERATURE, NOT TWO. The Bulk and the Warm-up share a worktop, so
+  one control writes both. Two controls would let the user state a contradiction
+  and answer a question they never asked. The Cold Proof keeps its own.
+- ALL FIVE CONTROLS ALWAYS SHOWN. First cut hid the Warm-up and the fridge
+  temperature when there was no Cold Proof. The spec review was right that this
+  breaks "durations are all adjustable" — on Same-day, two of the five were
+  unreachable, and the user had to invent a Cold Proof to get a Warm-up back. An
+  absent Stage is one the user can still reach for. The list still omits it.
+- Zero Activity reports zero Leavening rather than an infinity that would empty
+  the Anchor's column. Every duration can be dragged to zero, so this is
+  reachable, not theoretical.
+- THE TESTS DELIBERATELY DO NOT KNOW THE CONSTANTS. I first wrote a test pinning
+  Neapolitan to 0.737% and deleted it: the PRD forbids exactly that ("a test that
+  has to be rewritten when a constant is retuned is testing the wrong thing").
+  The Preset coverage asserts a 0.2%–2% fresh-yeast band, compared in fresh units
+  so the four dry Styles are commensurable; the rest assert directions.
+- Stage list variables are `stages`, not `steps` — CONTEXT.md lists "step" as a
+  synonym to avoid, and the standards review caught it in both the code and my
+  own comment. The Bulk control is labelled "Bulk" for the same reason.
+
+Files changed
+  A  src/lib/dough/ferment.ts
+  M  src/lib/dough/solve.ts (lock-aware; Leavening from the model)
+  M  src/lib/dough/styles.ts (placeholder literals -> derived seed)
+  M  src/lib/dough/types.ts (Style.freshYeastPercent removed)
+  M  src/lib/dough/solve.test.ts (+9 tests)
+  M  src/lib/format.ts (formatHours)
+  M  src/lib/components/Workbench.svelte (Proof section; Bake section folded in)
+
+Verification
+  pnpm test:unit  26 passed
+  pnpm check      0 errors, 0 warnings
+  pnpm lint       clean
+  pnpm build      ok — wrote ./build
+  svelte-autofixer on Workbench.svelte: no issues. Its one suggestion — rewrite
+  the presetUses $derived as $derived.by — is a false positive; that derived is
+  meant to hold a function and $derived.by would call it with no argument.
+  Reviewed on both axes before committing. Both findings above ("all five
+  controls" and the constant-pinning test) came from that review and are fixed;
+  the naming fixes came from the standards axis.
+
+Notes for the next iteration
+- Next up: Issue 05 — lock the Leavening. solve() already branches on
+  recipe.lock; the "leavening" branch currently takes the stored percentage at
+  face value and does not touch the schedule. That branch is where the Elastic
+  Stage (Cold Proof if present, else Bulk) has to absorb the difference, clamped
+  at zero.
+- CARRY THIS ONE: Recipe.freshYeastPercent is seeded from the Preset schedule and
+  is then never updated while lock === "schedule". The moment the user flips the
+  lock it will be stale — whatever they last saw on screen is not what is stored.
+  Issue 05 must re-seed it from the current schedule as the lock flips, or make
+  the Leavening branch read a value the UI actually wrote.
+- The fresh/dry ternary now appears in solve.ts, the weights table, YEAST_TYPES
+  and the new plausibility test. Iteration 3 said the threshold was reached; it
+  is now well past. Extract a yeast helper in Issue 05.
+- Still NOT VERIFIED ON A PHONE. AdjustableValue now drives nine controls and no
+  one has yet dragged one on a touchscreen.
+- Untracked/modified and not mine: .scratch/ralph/ralph-once.sh.
+
+Iteration 5 — 2026-08-16 — Issue 05: Lock the Leavening  [DONE]
+----------------------------------------------------------------
+
+What I did
+- ferment.ts gained the model run backwards: scheduleFor(schedule, freshYeastPercent)
+  finds the Elastic Stage, works out the Activity the other Stages already deliver,
+  and gives the Elastic Stage the hours that make up the difference. elasticStageOf
+  names it — the Cold Proof when there is one, otherwise the Bulk.
+- solve() calls it whenever lock === "leavening". SolvedRecipe gained elasticStage
+  and its schedule is now the solved one, not a copy of the input.
+- withLock(recipe, lock) is the Lock flip as a domain operation, exported from the
+  barrel. Whichever side is about to become derived is first written with what the
+  other side was already asking for.
+- Workbench: a "Locked" section with a two-way segmented control and a line of prose
+  saying which Stage moves. The derived side — the yeast quantity, or the Elastic
+  Stage's duration — loses its slider and shows a locked readout in its place.
+- Extracted src/lib/dough/yeast.ts (inYeastType / asFreshPercent) on the fresh/dry
+  ternary's fourth appearance, as the last three iterations kept saying to.
+- Also extracted two snippets in the Workbench: `segmented` (the Lock and the yeast
+  type are the same control) and `solvedValue` (the locked readout), and folded the
+  three duration sliders into one #each over a DURATIONS table.
+- 38 tests (was 26). check, lint, build clean; dev server 200.
+
+Key decisions and reasoning
+- THE ELASTIC STAGE IS READ OFF THE STORED SCHEDULE, NOT THE SOLVED ONE. Once too
+  much yeast has clamped the Cold Proof to zero it is still the Stage giving way. If
+  the role were decided from the solved schedule, the Bulk would quietly take over
+  at that moment and start shrinking too — the clamp would leak into the Stage it
+  was supposed to protect.
+- HANDING THE ROLE OVER NEEDS THE ON-SCREEN VALUE BANKED. The spec review caught the
+  reverse case: with the Leavening locked on a Same-day dough the Bulk is Elastic and
+  is a readout; raise the Cold Proof off zero and the role moves, so the Bulk becomes
+  an input again — holding whatever was stored before the Lock rather than the number
+  it was just displaying. setStageHours() banks the solved Elastic duration into the
+  Recipe before changing any other duration around it. UI-level, so no test: the PRD
+  names the solver and the URL codec as the only seams.
+- withLock IS IN THE DOMAIN, NOT THE COMPONENT. It fixes the staleness Iteration 4
+  flagged, and it is the only part of the Lock the solver cannot express — solve() is
+  pure, so something has to decide what the Recipe holds at the moment of the flip.
+  Being in the domain means the round-trip is testable through the public surface,
+  which is what the ticket asks for.
+- THE TESTS STILL DO NOT KNOW THE CONSTANTS. Every Lock test is stated as a direction
+  or a round-trip ("twice the yeast, less fridge time"; "both Locks in sequence gives
+  the schedule back"), never as a figure. The one absolute is the zero clamp.
+- The locked yeast readout shows a percentage, not grams, so the field reads in the
+  same unit whether it is an input or an answer. The grams are in the sticky header
+  a few centimetres away.
+- Leavening is adjusted in the units of the yeast the baker is holding (0.05–5%),
+  not in the fresh-yeast figure the model stores. It matches what the header shows.
+
+Files changed
+  A  src/lib/dough/yeast.ts
+  M  src/lib/dough/ferment.ts (elasticStageOf, scheduleFor, rateAt)
+  M  src/lib/dough/solve.ts (the leavening branch; withLock)
+  M  src/lib/dough/types.ts (ElasticStage; SolvedRecipe.elasticStage)
+  M  src/lib/dough/index.ts (withLock, the yeast converters)
+  M  src/lib/dough/solve.test.ts (+12 tests, "the Lock")
+  M  src/lib/components/Workbench.svelte (Locked section; derived readouts)
+
+Verification
+  pnpm test:unit  38 passed
+  pnpm check      0 errors, 0 warnings
+  pnpm lint       clean
+  pnpm build      ok
+  pnpm dev        200
+  svelte-autofixer on Workbench.svelte: no issues (the $derived.by suggestion on
+  presetUses is the same false positive as last iteration).
+  Reviewed on both axes before committing. Standards found three judgement calls —
+  the yeast conversion living in the view, the Elastic Stage's label written out by
+  hand instead of taken from DURATIONS, and an #each keyed on label rather than
+  value — all three fixed. Spec found the Elastic-role handover above, fixed, and
+  called the segmented-control extraction mild scope creep: kept, because without it
+  the Lock control would have been a second copy of the yeast-type radio group.
+
+Notes for the next iteration
+- Next up: Issue 06 (Bake Time -> clock times) or 07 (Deviations). Both are unblocked
+  by Issue 04; 08 was blocked on this ticket and is now free too.
+- FOR ISSUE 07: Deviation tracking compares the Recipe against its Preset. Note that
+  a Preset carries no Leavening figure at all — Recipe.freshYeastPercent has nothing
+  to compare against unless the comparison derives leaveningFor(style.schedule). And
+  `lock` itself is a Recipe field with no Preset counterpart beyond "schedule".
+- FOR ISSUE 08: the persisted/encoded Recipe must carry `lock` and
+  `freshYeastPercent`, or a shared link to a yeast-locked dough decodes as a
+  schedule-locked one and silently means something else.
+- The Elastic Stage's solved duration is full precision (e.g. 23.42 h) and is only
+  rounded for display. If Issue 06 turns Stages into clock times, that is where the
+  precision starts to show.
+- STILL NOT VERIFIED ON A PHONE. AdjustableValue now drives up to nine controls and
+  no one has dragged one on a touchscreen yet.
+- Untracked/modified and not mine: .scratch/ralph/ralph-once.sh.
+
+
+Iteration 6 — 2026-08-16 — Issue 06: Bake Time → clock times  [DONE]
+---------------------------------------------------------------------
+
+What I did
+- Added src/lib/bake-time.ts: clockTimes(schedule, bakeTime) counts the Proof
+  Schedule back from the bake, giving the moment to mix and the moment each
+  Stage begins; formatClockTime(at, bakeTime) prints one of those moments with
+  just enough date on it to be unambiguous.
+- Workbench: an "Eating at" datetime-local field with a clear button, above the
+  schedule list. With a Bake Time set the list gains a leading "Mix" line and
+  every entry — Stages and the Bake line — carries its clock time. With none,
+  the list is exactly what it was and no date appears anywhere.
+- 6 tests in src/lib/bake-time.test.ts, written first. 44 tests total (was 38).
+  check, lint, build all clean.
+
+Key decisions and reasoning
+- BAKE TIME IS NOT PART OF THE RECIPE. It is a $state string local to the
+  Workbench. ADR-0005 says it must never reach a shared link; keeping it out of
+  the Recipe enforces that structurally instead of leaving Issue 08 a note to
+  remember. The codec encodes a Recipe, and a Bake Time is not in one. Accepted
+  cost: going back to the Style picker clears it, which is what "session-only"
+  means anyway.
+- CALENDAR ARITHMETIC IS NOT FERMENTATION ARITHMETIC. The module sits beside
+  format.ts, not in src/lib/dough/. The PRD says solve() is the dough module's
+  whole computational interface, and counting hours on a wall clock has no
+  business behind it.
+- DATE CONTEXT ESCALATES IN THREE STEPS: bare time on the day of the bake,
+  "Fri 14:00" on any other day, "Sat 8 Aug, 14:00" once an entry is six or more
+  days out — the point where a weekday name stops being unique. Formatting is
+  pinned to en-GB so the app reads 24-hour and the tests are deterministic; the
+  PRD is English-only, so this is not an i18n hole.
+- A THIRD TEST SEAM, DELIBERATELY. The PRD names two. This adds a small third,
+  because the failure modes are silent arithmetic — a Stage of zero hours, an
+  Elastic Stage solved to 23.42 h, midnight and week boundaries — and a pure
+  module tested through its public surface is the same kind of test the solver
+  gets. The exclusions the PRD actually lists (component, localStorage, service
+  worker, Playwright) are untouched. The spec review flagged this; it is a
+  judgement call made with eyes open, not an oversight.
+- Times round to the whole minute. The Elastic Stage solves to full precision
+  (23.42 h) and a mixing time of 14:35:12 would be false precision on a number
+  the baker acts on with a bowl.
+- The schedule list reads off solved.schedule, so clock times follow the Elastic
+  Stage automatically when the Leavening is locked. No extra wiring.
+
+Files changed
+  A  src/lib/bake-time.ts, src/lib/bake-time.test.ts
+  M  src/lib/components/Workbench.svelte (Eating at field; clock times in the list)
+
+Verification
+  pnpm test:unit  44 passed
+  pnpm check      0 errors, 0 warnings
+  pnpm lint       clean
+  pnpm build      ok
+  svelte-autofixer on the changed markup: no issues (the presetUses $derived.by
+  suggestion is the same false positive as the last two iterations).
+  Reviewed on both axes. Standards: no violations, three judgement calls all
+  scoped to one component and left as they are. Spec: all six acceptance
+  criteria met, one scope note — the third test seam above.
+
+Notes for the next iteration
+- Next up: Issue 07 (Deviations) or 08 (session restore and shareable links);
+  09 (PWA) has been free since Issue 01.
+- FOR ISSUE 08: nothing to do about the Bake Time. It is not in the Recipe, so
+  it cannot be encoded by accident. Iteration 5's note still stands — the codec
+  must carry `lock` and `freshYeastPercent`.
+- FOR ISSUE 07: Iteration 5's note stands unchanged. A Preset carries no
+  Leavening figure, so a Deviation comparison has to derive one from the Preset
+  schedule, and `lock` has no Preset counterpart beyond "schedule".
+- STILL NOT VERIFIED ON A PHONE. Nine-plus sliders, and now a datetime-local
+  field whose native picker is the one control here nobody has seen on iOS.
+- Untracked/modified and not mine: .scratch/ralph/ralph-once.sh.
+
+
+Iteration 7 — 2026-08-17 — Issue 07: Deviations — mark, revert, reset  [DONE]
+-----------------------------------------------------------------------------
+
+What I did
+- Added src/lib/dough/deviations.ts: deviationsOf(recipe) returns what the Preset
+  said for every field the Recipe no longer agrees with it about; isModified is
+  that set being non-empty; revert(recipe, field) copies one value back out of the
+  Preset; resetToPreset(recipe) starts the Style again. One table of thirteen
+  fields — one per adjustment the app offers — says how each is read, what the
+  Preset says, and how to put it back.
+- Added src/lib/components/RevertChip.svelte: the mark and the way back in one
+  control ("was 62%", tap to revert). AdjustableValue takes an optional was/
+  onrevert pair and renders it beside its label, so all nine-plus sliders gained
+  per-field revert at once; the Batch steppers and the yeast type carry their own.
+- Workbench header: a "modified" pill beside the Style name and a Reset button,
+  both present only when there is something to say.
+- Extracted copyRecipe into styles.ts; assign() in the Workbench writes a Recipe
+  the domain handed back over the parent's $state object, and setLock now uses it.
+- 55 tests (was 44). check, lint, build clean; dev server 200.
+
+Key decisions and reasoning
+- THE DERIVED SIDE OF THE LOCK IS NEVER A DEVIATION. With the schedule locked the
+  Leavening is an answer, so it is not marked whatever the schedule does to it;
+  with the Leavening locked the Elastic Stage's hours are the answer, so they are
+  not marked either. The spec review caught the second half: setStageHours banks
+  the Elastic Stage's solved duration into the Recipe, and marking that left the
+  Recipe reading "modified" about a fractional Cold Proof nobody chose, on a
+  control that is a readout and so could not offer a revert. Two tests pin it,
+  including that the mark reappears the instant the Lock hands that side back.
+- THIRTEEN FIELDS, ONE PER CONTROL. The field list is the app's adjustments, not
+  the Recipe's shape. So the room temperature is one field writing both the Bulk
+  and the Warm-up (as its control does), the Warm-up temperature is not a field at
+  all, and `lock` is not one either — it is which side the baker drives, not a
+  value of the dough. Written up in the issue file, including the one gap: a
+  Recipe decoded in Issue 08 with a divergent Warm-up temperature would neither
+  mark nor revert it.
+- A PRESET CARRIES NO LEAVENING FIGURE (Iteration 5's note), so the comparison
+  derives one from the Preset schedule with the ferment model. The alternative —
+  putting the figure back on Style — would store the same number twice.
+- The chips read in the units of the control they sit beside, not the Preset's:
+  the Leavening chip converts through the *current* yeast type so "was" and "is"
+  are commensurable even on a dough whose yeast type was swapped too.
+- The revert is per-control rather than per-Recipe-field, which is why it is a
+  component prop on AdjustableValue instead of a row of buttons somewhere: the
+  ticket's motivation is undoing one fat-fingered drag, and the drag is where the
+  undo has to be.
+- No component tests, as ever. deviations.ts is a pure module tested through its
+  public surface — the same latitude Iteration 6 took for bake-time.ts.
+
+Files changed
+  A  src/lib/dough/deviations.ts, src/lib/dough/deviations.test.ts
+  A  src/lib/components/RevertChip.svelte
+  M  src/lib/dough/styles.ts (copyRecipe), src/lib/dough/index.ts (barrel)
+  M  src/lib/components/AdjustableValue.svelte (was/onrevert)
+  M  src/lib/components/Workbench.svelte (marks, reverts, modified pill, Reset)
+
+Verification
+  pnpm test:unit  55 passed
+  pnpm check      0 errors, 0 warnings
+  pnpm lint       clean
+  pnpm build      ok
+  pnpm dev        200
+  Reviewed on both axes before committing. Spec found the Elastic Stage marking
+  bug above (fixed at the root, in the domain, not hidden in the view) and the
+  yeast-unit note (kept, commented). Standards found the Recipe deep-copy written
+  a third time (extracted copyRecipe) and RevertChip's props not using the
+  interface Props convention (fixed). Two standards judgement calls kept: the
+  `was` formatter is a switch in the view, because display units are the view's
+  business and the domain is deliberately unit-agnostic; and DURATIONS carries
+  both a schedule key and a DeviationField, which is the UI's own mapping table.
+
+Notes for the next iteration
+- Next up: Issue 08 (session restore and shareable links) or 09 (PWA). Both are
+  unblocked; 08 is the last thing the domain needs.
+- FOR ISSUE 08: Iteration 5's note stands — the encoded Recipe must carry `lock`
+  and `freshYeastPercent`. Now also: nothing about Deviations needs encoding, by
+  construction, because they are derived from styleId. And copyRecipe is there
+  if the codec wants a clean Recipe to fill in.
+- FOR ISSUE 08: decoding must not produce a Recipe whose Warm-up temperature
+  differs from its Bulk unless a control for it is added, per the gap above.
+- STILL NOT VERIFIED ON A PHONE. The chips are the tenth-plus tap target added
+  without anyone touching a touchscreen, and they sit in the same row as a
+  slider's readout — the one place a mis-tap would be annoying.
+- Untracked/modified and not mine: .scratch/ralph/ralph-once.sh.
+
+
+Iteration 8 — 2026-08-18 — Issue 08: Session restore and shareable links  [DONE]
+---------------------------------------------------------------------------------
+
+What I did
+- Added src/lib/dough/codec.ts: encodeRecipe / decodeRecipe, a positional versioned
+  format ending in a checksum. Exported from the barrel — the second public surface
+  the dough module has, alongside solve().
+- Added src/lib/session.ts: the browser side. localStorage under one versioned key,
+  the Recipe written to the address bar as it changes, and openingRecipe() holding
+  the precedence rule between them.
+- +page.svelte restores in onMount (after hydration — the page is prerendered) and
+  writes back from one $effect. A Recipe that arrived in a link is remembered as a
+  string and the stored session is left alone until that string stops matching.
+- Added src/lib/components/ShareLink.svelte in the Workbench header: navigator.share
+  where there is one, clipboard with a "Copied" state where there is not.
+- 12 codec tests, written first. 67 tests total (was 55). check, lint, build clean.
+
+Key decisions and reasoning
+- THE LINK CARRIES A CHECKSUM. The acceptance criteria ask a truncated hash to fall
+  back, and nothing else in a positional numeric format can notice one: every field
+  on its own is plausible as some other number, so a link cut in half decodes to a
+  real but different dough. Six characters of FNV-1a, base 36, no escaping. The
+  spec review called it scope creep; it is the only way the criterion is true rather
+  than nearly true, so it stayed. Written up in the issue file.
+- BOTH ROOM TEMPERATURES ARE ENCODED. First cut carried one and let the Warm-up
+  follow it home, per Iteration 7's note. The Same-day Preset broke it — 22 °C bulk,
+  20 °C warm-up — so a Style straight out of its own Preset failed the round-trip.
+  Caught by the first test run, which is what that test is for. Iteration 7's gap is
+  unchanged, not widened: a divergent Warm-up temperature is still neither marked
+  nor revertible.
+- VALIDATION RUNS BEFORE THE CHECKSUM. The spec review noticed the checksum rejected
+  every mangled link first, so the per-field validators were never reached by any
+  test and could have been mutated freely. Reordering costs nothing and makes the
+  existing tests exercise the branch that actually names what is wrong.
+- decodeURIComponent THROWS ON `%zz`. Real bug, found by the spec review: a
+  hand-mangled hash took down onMount and the app rendered nothing at all — the exact
+  failure the criterion forbids. Now guarded, falling back to the raw text.
+- THE VERSION IS WRITTEN ONCE. The key and the payload both carry it, as the PRD
+  asks, but derived from one constant: two places to bump is one place to forget.
+- ShareLink TAKES NO RECIPE. The page keeps the current dough in the address bar, so
+  the link to send is location.href. The first cut re-encoded the Recipe to build a
+  URL that was already on screen (standards review, Feature Envy) — this way there is
+  one encoder and one place the URL is decided.
+- REPLACE, NOT PUSH, on the hash. Every drag of a slider would otherwise be a history
+  entry and the back button would walk backwards through the baker's own adjustments.
+- GOING BACK TO THE PICKER DOES NOT CLEAR THE STORED SESSION. It clears the hash, so
+  the URL stops claiming a Recipe that is not on screen, but the dough is still there
+  next visit. The criterion "returning with no hash restores the last session" is
+  written without exception, and a mis-tap on a floury phone should not cost work.
+
+Files changed
+  A  src/lib/dough/codec.ts, src/lib/dough/codec.test.ts
+  A  src/lib/session.ts
+  A  src/lib/components/ShareLink.svelte
+  M  src/lib/dough/index.ts (codec exported; doc comment)
+  M  src/routes/+page.svelte (restore, persist, share)
+  M  src/lib/components/Workbench.svelte (Share in the header)
+
+Verification
+  pnpm test:unit  67 passed
+  pnpm check      0 errors, 0 warnings
+  pnpm lint       clean
+  pnpm build      ok
+  pnpm dev        200
+  svelte-autofixer on both changed components: no issues. Its suggestions about
+  calling functions inside an $effect are false positives — writing the URL and
+  localStorage is what that effect is for.
+  Reviewed on both axes before committing. Spec found the decodeURIComponent crash
+  and the unreachable validators (both fixed); Standards found the ShareLink
+  re-encode and a STYLE_IDS list that would accept a missing Style (both fixed —
+  the list is now `as const satisfies` with a compile-time exhaustiveness type).
+
+Notes for the next iteration
+- Next up: Issue 09 (installable offline PWA) — the last ticket. It has been
+  unblocked since Issue 01, and app.html already carries the iOS meta tags.
+- FOR ISSUE 09: the service worker must not cache the hash as part of a page
+  identity, and iOS home-screen apps are exempt from the seven-day storage purge,
+  which is the reason session restore is reliable there at all.
+- NOT VERIFIED IN A BROWSER, and this is the iteration where that matters most.
+  Everything new here is browser glue — localStorage, location.hash, history
+  .replaceState, navigator.share — and none of it has been run. The unit tests cover
+  the codec only, by design. Someone should open the app, adjust a dough, copy the
+  URL into a fresh tab, and confirm the picker is reachable and the session survives
+  a reload. A browser-tool smoke test was attempted this iteration and declined.
+- The codec format is now load-bearing for every link already sent. Positions are the
+  format: append to STYLE_IDS / NUMBERS, never reorder, or bump VERSION.
+- CONTEXT.md has no glossary entry for Session or for the encoded Recipe, though both
+  are now domain vocabulary the code and comments lean on (standards review). Worth a
+  /domain-modeling pass before v1 is called done.
+- Untracked/modified and not mine: .scratch/ralph/ralph-once.sh.
+
+Iteration 9 — 2026-08-18 — Issue 09: Installable offline PWA  [DONE]
+--------------------------------------------------------------------
+
+What I did
+- Added static/manifest.webmanifest: name, short name, description, standalone
+  display, the warm surface colour as theme and background, and four icon entries
+  (an SVG plus 192/512 PNG, the 512 declared maskable as well).
+- Drew static/icon.svg — a top-down pizza on the accent red, artwork inside the
+  central 80% so an Android launcher can mask it — and rendered icon-192.png,
+  icon-512.png and a 180×180 apple-touch-icon.png from it with ImageMagick.
+- Added src/service-worker.ts: precaches build + files + prerendered under a
+  cache named for the build version, drops every other cache on activation,
+  skipWaiting so a deployment does not need two launches, and answers a
+  precached path from the cache with the network as the fallback.
+- Added src/lib/pwa.ts and called it from onMount in +layout.svelte. Automatic
+  registration is off in vite.config.ts (serviceWorker: { register: false }).
+- app.html gained the manifest, icon and apple-touch-icon links; the scaffold's
+  Svelte-logo favicon in src/lib/assets/ is gone.
+- No tests. The PRD says so in as many words ("no service worker tests"), and
+  there is no new pure module to point one at.
+
+Key decisions and reasoning
+- NO SERVICE WORKER AT ALL DURING DEVELOPMENT. The criterion is that it must not
+  interfere with `pnpm dev`, and SvelteKit registers one automatically. The
+  alternative — keep automatic registration and bail out inside the worker on the
+  dev flag — still leaves a worker installed and controlling the page. Turning
+  registration off and doing it by hand is two extra files' worth of code and
+  makes the dev story "there isn't one".
+- THE MANIFEST IS RELATIVE, NOT ROOTED. start_url, scope and every icon src are
+  `./`-relative, so they resolve against the manifest's own URL. The rest of the
+  app is base-aware through Kit (%sveltekit.assets%, $service-worker's prefix,
+  `base` in pwa.ts) and a static JSON file cannot be; relative paths are the one
+  form that does not need to be. `id` and `orientation` were dropped — the first
+  defaults to start_url, the second locked rotation nobody asked to lock.
+- START_URL DROPS THE HASH, WHICH IS THE POINT. The Recipe lives in the fragment
+  (ADR-0005), so an installed app opens at `./` with no Recipe in the URL and
+  restores the stored session instead. Installing from someone's link therefore
+  does not freeze their dough into the launcher.
+- SKIPWAITING, BUT NOT CLIENTS.CLAIM. Without skipWaiting the new worker waits for
+  every tab holding the old one to close, and a home-screen app can stay warm for
+  weeks — the spec review was right that a deploy then needed a second launch. It
+  still does not seize a page that is already running: that page has loaded
+  everything it needs, so the old cache going away underneath it costs nothing.
+- NO RUNTIME CACHING. The first cut also wrote every successful response into the
+  cache. Both reviews flagged it: the criterion asks for a precache with the
+  network as fallback, nothing in this app fetches anything at runtime, and all it
+  achieved was unversioned entries inside a versioned cache.
+- The favicon went with the change. It was still the Svelte logo and it was the
+  only icon not coming from static/; two sources for one mark was the worse option.
+- The palette is now written in three places (layout.css tokens, app.html's
+  theme-color, the manifest) because neither of the latter two can read a custom
+  property. Commented at the tokens, which is where it is decided.
+
+Files changed
+  A  src/service-worker.ts, src/lib/pwa.ts
+  A  static/manifest.webmanifest, static/icon.svg,
+     static/icon-192.png, static/icon-512.png, static/apple-touch-icon.png
+  M  src/app.html (manifest + icon links)
+  M  src/routes/+layout.svelte (registers the worker; favicon import gone)
+  M  src/routes/layout.css (comment: where the surface colour is decided)
+  M  vite.config.ts (serviceWorker: { register: false })
+  D  src/lib/assets/favicon.svg
+
+Verification
+  pnpm test:unit  67 passed (unchanged — nothing new to test)
+  pnpm check      0 errors, 0 warnings
+  pnpm lint       clean
+  pnpm build      ok — build/ contains service-worker.js, manifest.webmanifest and
+                  the icons; the built worker's precache list is every _app asset,
+                  every static file and `/`
+  pnpm dev        200, and the served HTML contains no registration at all
+  pnpm preview    200 for /, /service-worker.js, /manifest.webmanifest and both
+                  PNG icons
+  Reviewed on both axes before committing. Standards: no hard violations; the doc
+  comment convention, the array-instead-of-Set lookup and the runtime cache were
+  fixed, the palette duplication commented. Spec: the activation-timing finding
+  (fixed with skipWaiting) and the runtime caching and `orientation` scope creep
+  (both removed); the hardcoded root paths became relative.
+
+Notes for the next iteration
+- Issue 09 was the last ticket. Every acceptance criterion across all nine is
+  ticked, so v1 is feature-complete on paper.
+- NOTHING HAS BEEN VERIFIED ON A DEVICE, and this is now the whole outstanding
+  risk of the project. Nobody has dragged a slider on a touchscreen, seen the iOS
+  datetime picker, installed the app to a home screen, or pulled the wifi. The
+  build ships the right files and every asset the page references is in the
+  precache list; that is a different claim from "it works in a kitchen".
+- The two device-shaped things most likely to bite: the 180×180 apple-touch-icon
+  is drawn opaque on the accent red (iOS does not composite transparency), and
+  `apple-mobile-web-app-status-bar-style` is "default", which leaves a light status
+  bar over a dark-mode app. Both are one-line changes once someone has looked.
+- CONTEXT.md still has no glossary entry for Session or for the encoded Recipe
+  (Iteration 8's note). Worth a /domain-modeling pass before calling v1 done.
+- Untracked/modified and not mine: .scratch/ralph/ralph-once.sh.
+
+
+Follow-up — 2026-08-18 — session.ts writes the hash through the router
+----------------------------------------------------------------------
+
+src/lib/session.ts used the History API directly (Iteration 8, showInUrl).
+SvelteKit's router keeps its own bookkeeping — history index, navigation index,
+page state — inside the history entry's state object, so writing over it by hand
+breaks the router, and the dev build warns about exactly this. Now uses
+`replaceState` from $app/navigation, passing `{}` because the app carries no page
+state of its own. The svelte/no-navigation-without-resolve rule is silenced at the
+call with the reason in a comment: this is the current URL with a different
+fragment, not a route to resolve. check, lint, test:unit (67) and build clean.
+Committed as f926f09.
+
+
+Follow-up 2 — 2026-08-18 — the router has to be ready first, and the app has now
+been run in a browser
+-----------------------------------------------------------------------------
+
+The switch to $app/navigation's replaceState (f926f09) broke the first write. The
+router is only ready once hydration has finished, and onMount is part of
+hydration: dev threw "Cannot call replaceState(...) before router is initialized",
+and the production build crashed reading `$set` on undefined router internals — so
+the built app rendered nothing after picking a Style. Deferring by a task
+(setTimeout) fixed dev and still crashed prod. The write now waits for
+`afterNavigate` plus one microtask, because the router marks itself started
+immediately after announcing that first navigation. localStorage still writes on
+the first pass; only the URL waits. Committed as b0310c8.
+
+AND THE STANDING "NOT VERIFIED IN A BROWSER" NOTE IS PARTLY DISCHARGED. Driven in
+Chrome against both `pnpm dev` and a built `pnpm preview`:
+  - the Style picker renders and picking a Style opens the Workbench;
+  - dragging the Hydration slider updates the weights and rewrites the hash live;
+  - history stays one entry deep across many drags (replaceState, not push);
+  - a reload with no hash restores the session from localStorage, hash and all;
+  - opening a hash link loads that dough;
+  - in the built app the service worker registers, precaches 18 entries including
+    `/`, controls the page, and the manifest parses with display: standalone and
+    four icons;
+  - no console errors anywhere in the above.
+Still unverified: anything iOS — home-screen install, the datetime-local picker,
+real offline with the network actually cut, and touch rather than a mouse.
