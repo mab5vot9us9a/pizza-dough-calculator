@@ -634,3 +634,98 @@ Notes for the next iteration
   are now domain vocabulary the code and comments lean on (standards review). Worth a
   /domain-modeling pass before v1 is called done.
 - Untracked/modified and not mine: .scratch/ralph/ralph-once.sh.
+
+Iteration 9 — 2026-08-18 — Issue 09: Installable offline PWA  [DONE]
+--------------------------------------------------------------------
+
+What I did
+- Added static/manifest.webmanifest: name, short name, description, standalone
+  display, the warm surface colour as theme and background, and four icon entries
+  (an SVG plus 192/512 PNG, the 512 declared maskable as well).
+- Drew static/icon.svg — a top-down pizza on the accent red, artwork inside the
+  central 80% so an Android launcher can mask it — and rendered icon-192.png,
+  icon-512.png and a 180×180 apple-touch-icon.png from it with ImageMagick.
+- Added src/service-worker.ts: precaches build + files + prerendered under a
+  cache named for the build version, drops every other cache on activation,
+  skipWaiting so a deployment does not need two launches, and answers a
+  precached path from the cache with the network as the fallback.
+- Added src/lib/pwa.ts and called it from onMount in +layout.svelte. Automatic
+  registration is off in vite.config.ts (serviceWorker: { register: false }).
+- app.html gained the manifest, icon and apple-touch-icon links; the scaffold's
+  Svelte-logo favicon in src/lib/assets/ is gone.
+- No tests. The PRD says so in as many words ("no service worker tests"), and
+  there is no new pure module to point one at.
+
+Key decisions and reasoning
+- NO SERVICE WORKER AT ALL DURING DEVELOPMENT. The criterion is that it must not
+  interfere with `pnpm dev`, and SvelteKit registers one automatically. The
+  alternative — keep automatic registration and bail out inside the worker on the
+  dev flag — still leaves a worker installed and controlling the page. Turning
+  registration off and doing it by hand is two extra files' worth of code and
+  makes the dev story "there isn't one".
+- THE MANIFEST IS RELATIVE, NOT ROOTED. start_url, scope and every icon src are
+  `./`-relative, so they resolve against the manifest's own URL. The rest of the
+  app is base-aware through Kit (%sveltekit.assets%, $service-worker's prefix,
+  `base` in pwa.ts) and a static JSON file cannot be; relative paths are the one
+  form that does not need to be. `id` and `orientation` were dropped — the first
+  defaults to start_url, the second locked rotation nobody asked to lock.
+- START_URL DROPS THE HASH, WHICH IS THE POINT. The Recipe lives in the fragment
+  (ADR-0005), so an installed app opens at `./` with no Recipe in the URL and
+  restores the stored session instead. Installing from someone's link therefore
+  does not freeze their dough into the launcher.
+- SKIPWAITING, BUT NOT CLIENTS.CLAIM. Without skipWaiting the new worker waits for
+  every tab holding the old one to close, and a home-screen app can stay warm for
+  weeks — the spec review was right that a deploy then needed a second launch. It
+  still does not seize a page that is already running: that page has loaded
+  everything it needs, so the old cache going away underneath it costs nothing.
+- NO RUNTIME CACHING. The first cut also wrote every successful response into the
+  cache. Both reviews flagged it: the criterion asks for a precache with the
+  network as fallback, nothing in this app fetches anything at runtime, and all it
+  achieved was unversioned entries inside a versioned cache.
+- The favicon went with the change. It was still the Svelte logo and it was the
+  only icon not coming from static/; two sources for one mark was the worse option.
+- The palette is now written in three places (layout.css tokens, app.html's
+  theme-color, the manifest) because neither of the latter two can read a custom
+  property. Commented at the tokens, which is where it is decided.
+
+Files changed
+  A  src/service-worker.ts, src/lib/pwa.ts
+  A  static/manifest.webmanifest, static/icon.svg,
+     static/icon-192.png, static/icon-512.png, static/apple-touch-icon.png
+  M  src/app.html (manifest + icon links)
+  M  src/routes/+layout.svelte (registers the worker; favicon import gone)
+  M  src/routes/layout.css (comment: where the surface colour is decided)
+  M  vite.config.ts (serviceWorker: { register: false })
+  D  src/lib/assets/favicon.svg
+
+Verification
+  pnpm test:unit  67 passed (unchanged — nothing new to test)
+  pnpm check      0 errors, 0 warnings
+  pnpm lint       clean
+  pnpm build      ok — build/ contains service-worker.js, manifest.webmanifest and
+                  the icons; the built worker's precache list is every _app asset,
+                  every static file and `/`
+  pnpm dev        200, and the served HTML contains no registration at all
+  pnpm preview    200 for /, /service-worker.js, /manifest.webmanifest and both
+                  PNG icons
+  Reviewed on both axes before committing. Standards: no hard violations; the doc
+  comment convention, the array-instead-of-Set lookup and the runtime cache were
+  fixed, the palette duplication commented. Spec: the activation-timing finding
+  (fixed with skipWaiting) and the runtime caching and `orientation` scope creep
+  (both removed); the hardcoded root paths became relative.
+
+Notes for the next iteration
+- Issue 09 was the last ticket. Every acceptance criterion across all nine is
+  ticked, so v1 is feature-complete on paper.
+- NOTHING HAS BEEN VERIFIED ON A DEVICE, and this is now the whole outstanding
+  risk of the project. Nobody has dragged a slider on a touchscreen, seen the iOS
+  datetime picker, installed the app to a home screen, or pulled the wifi. The
+  build ships the right files and every asset the page references is in the
+  precache list; that is a different claim from "it works in a kitchen".
+- The two device-shaped things most likely to bite: the 180×180 apple-touch-icon
+  is drawn opaque on the accent red (iOS does not composite transparency), and
+  `apple-mobile-web-app-status-bar-style` is "default", which leaves a light status
+  bar over a dark-mode app. Both are one-line changes once someone has looked.
+- CONTEXT.md still has no glossary entry for Session or for the encoded Recipe
+  (Iteration 8's note). Worth a /domain-modeling pass before calling v1 done.
+- Untracked/modified and not mine: .scratch/ralph/ralph-once.sh.
