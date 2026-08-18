@@ -1,3 +1,5 @@
+import { replaceState } from "$app/navigation";
+
 import { type Recipe, decodeRecipe } from "$lib/dough";
 
 /**
@@ -64,7 +66,13 @@ export function rememberSession(encoded: string): void {
 export function showInUrl(encoded: string | null): void {
 	const url = new URL(location.href);
 	url.hash = encoded ?? "";
-	history.replaceState(history.state, "", url);
+
+	// SvelteKit's own `replaceState`, not the History API's: the router keeps its
+	// bookkeeping in the history entry's state and writing over it by hand breaks it. The
+	// app carries no page state of its own, so there is nothing to preserve. Nothing to
+	// resolve either — this is the current URL with a different fragment, not a route.
+	// eslint-disable-next-line svelte/no-navigation-without-resolve
+	replaceState(url, {});
 }
 
 function recipeInUrl(): Recipe | null {
