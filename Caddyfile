@@ -1,0 +1,31 @@
+# Coolify's Traefik terminates TLS and forwards plain HTTP, so this is a bare port and not a
+# site address: Caddy must not try to obtain a certificate of its own.
+:80 {
+	root * /srv
+	encode zstd gzip
+
+	# Two complementary matchers, not one matcher plus a catch-all: a `header` directive with
+	# no matcher runs against immutable assets too and overwrites whatever the matched one set.
+	@immutable path /_app/immutable/*
+	@mutable not path /_app/immutable/*
+
+	# Vite content-hashes these filenames, so a year is safe and a new build is a new URL.
+	header @immutable Cache-Control "public, max-age=31536000, immutable"
+
+	# Everything else revalidates on every request. This is what makes a deploy reach an
+	# installed app: the service worker caches per build version and calls skipWaiting, but
+	# only if the browser actually re-fetches index.html and service-worker.js. `no-cache`
+	# rather than `no-store` — a 304 is cheap, a stale app is not.
+	header @mutable Cache-Control "no-cache"
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	# The adapter emits no 404.html. One route, and all state lives in the URL hash
+	# (ADR-0005), which never reaches the server — so any path is the app.
+	try_files {path} /index.html
+	file_server
+}
