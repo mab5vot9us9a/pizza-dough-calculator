@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { afterNavigate } from "$app/navigation";
+
 	import { onMount } from "svelte";
 
 	import StylePicker from "$lib/components/StylePicker.svelte";
@@ -27,6 +29,22 @@
 	/** Nothing is written back until the app knows what it opened with. */
 	let restored = $state(false);
 
+	/**
+	 * Whether the address bar can be written to yet.
+	 *
+	 * The Recipe goes into the URL through SvelteKit's router, and the router is not
+	 * ready to be written to until hydration has finished — `onMount` is part of
+	 * hydration, so it is too early, and a write from there throws. The first
+	 * navigation completing is the signal, one microtask later because the router
+	 * finishes marking itself started immediately after announcing it.
+	 *
+	 * Nothing is lost by waiting: until then the URL is whatever the visitor arrived
+	 * with, which is already the Recipe on screen.
+	 */
+	let routerReady = $state(false);
+
+	afterNavigate(() => queueMicrotask(() => (routerReady = true)));
+
 	// After hydration, not during it: the page is prerendered, and neither the hash
 	// nor localStorage exists when that HTML is built.
 	onMount(() => {
@@ -41,15 +59,10 @@
 	$effect(() => {
 		if (!restored) return;
 
-		if (!recipe) {
-			showInUrl(null);
-			return;
-		}
+		const encoded = recipe ? encodeRecipe(recipe) : null;
+		if (routerReady) showInUrl(encoded);
 
-		const encoded = encodeRecipe(recipe);
-		showInUrl(encoded);
-
-		if (encoded === untouchedLink) return;
+		if (!encoded || encoded === untouchedLink) return;
 		untouchedLink = null;
 		rememberSession(encoded);
 	});
