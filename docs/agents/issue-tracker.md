@@ -2,8 +2,8 @@
 
 Issues and PRDs for this repo live as markdown files in `.scratch/`.
 
-This repo has no git remote and no hosted issue tracker. There are no pull requests, so PRs are not
-a triage surface.
+This repo has a git remote and CI runs on pull requests, but it has no hosted issue tracker. PRs are
+a gate, not a triage surface: issue text and triage state live in the files below.
 
 ## Conventions
 
