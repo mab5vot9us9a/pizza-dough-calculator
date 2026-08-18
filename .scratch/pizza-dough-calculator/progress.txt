@@ -542,3 +542,95 @@ Notes for the next iteration
   without anyone touching a touchscreen, and they sit in the same row as a
   slider's readout — the one place a mis-tap would be annoying.
 - Untracked/modified and not mine: .scratch/ralph/ralph-once.sh.
+
+
+Iteration 8 — 2026-08-18 — Issue 08: Session restore and shareable links  [DONE]
+---------------------------------------------------------------------------------
+
+What I did
+- Added src/lib/dough/codec.ts: encodeRecipe / decodeRecipe, a positional versioned
+  format ending in a checksum. Exported from the barrel — the second public surface
+  the dough module has, alongside solve().
+- Added src/lib/session.ts: the browser side. localStorage under one versioned key,
+  the Recipe written to the address bar as it changes, and openingRecipe() holding
+  the precedence rule between them.
+- +page.svelte restores in onMount (after hydration — the page is prerendered) and
+  writes back from one $effect. A Recipe that arrived in a link is remembered as a
+  string and the stored session is left alone until that string stops matching.
+- Added src/lib/components/ShareLink.svelte in the Workbench header: navigator.share
+  where there is one, clipboard with a "Copied" state where there is not.
+- 12 codec tests, written first. 67 tests total (was 55). check, lint, build clean.
+
+Key decisions and reasoning
+- THE LINK CARRIES A CHECKSUM. The acceptance criteria ask a truncated hash to fall
+  back, and nothing else in a positional numeric format can notice one: every field
+  on its own is plausible as some other number, so a link cut in half decodes to a
+  real but different dough. Six characters of FNV-1a, base 36, no escaping. The
+  spec review called it scope creep; it is the only way the criterion is true rather
+  than nearly true, so it stayed. Written up in the issue file.
+- BOTH ROOM TEMPERATURES ARE ENCODED. First cut carried one and let the Warm-up
+  follow it home, per Iteration 7's note. The Same-day Preset broke it — 22 °C bulk,
+  20 °C warm-up — so a Style straight out of its own Preset failed the round-trip.
+  Caught by the first test run, which is what that test is for. Iteration 7's gap is
+  unchanged, not widened: a divergent Warm-up temperature is still neither marked
+  nor revertible.
+- VALIDATION RUNS BEFORE THE CHECKSUM. The spec review noticed the checksum rejected
+  every mangled link first, so the per-field validators were never reached by any
+  test and could have been mutated freely. Reordering costs nothing and makes the
+  existing tests exercise the branch that actually names what is wrong.
+- decodeURIComponent THROWS ON `%zz`. Real bug, found by the spec review: a
+  hand-mangled hash took down onMount and the app rendered nothing at all — the exact
+  failure the criterion forbids. Now guarded, falling back to the raw text.
+- THE VERSION IS WRITTEN ONCE. The key and the payload both carry it, as the PRD
+  asks, but derived from one constant: two places to bump is one place to forget.
+- ShareLink TAKES NO RECIPE. The page keeps the current dough in the address bar, so
+  the link to send is location.href. The first cut re-encoded the Recipe to build a
+  URL that was already on screen (standards review, Feature Envy) — this way there is
+  one encoder and one place the URL is decided.
+- REPLACE, NOT PUSH, on the hash. Every drag of a slider would otherwise be a history
+  entry and the back button would walk backwards through the baker's own adjustments.
+- GOING BACK TO THE PICKER DOES NOT CLEAR THE STORED SESSION. It clears the hash, so
+  the URL stops claiming a Recipe that is not on screen, but the dough is still there
+  next visit. The criterion "returning with no hash restores the last session" is
+  written without exception, and a mis-tap on a floury phone should not cost work.
+
+Files changed
+  A  src/lib/dough/codec.ts, src/lib/dough/codec.test.ts
+  A  src/lib/session.ts
+  A  src/lib/components/ShareLink.svelte
+  M  src/lib/dough/index.ts (codec exported; doc comment)
+  M  src/routes/+page.svelte (restore, persist, share)
+  M  src/lib/components/Workbench.svelte (Share in the header)
+
+Verification
+  pnpm test:unit  67 passed
+  pnpm check      0 errors, 0 warnings
+  pnpm lint       clean
+  pnpm build      ok
+  pnpm dev        200
+  svelte-autofixer on both changed components: no issues. Its suggestions about
+  calling functions inside an $effect are false positives — writing the URL and
+  localStorage is what that effect is for.
+  Reviewed on both axes before committing. Spec found the decodeURIComponent crash
+  and the unreachable validators (both fixed); Standards found the ShareLink
+  re-encode and a STYLE_IDS list that would accept a missing Style (both fixed —
+  the list is now `as const satisfies` with a compile-time exhaustiveness type).
+
+Notes for the next iteration
+- Next up: Issue 09 (installable offline PWA) — the last ticket. It has been
+  unblocked since Issue 01, and app.html already carries the iOS meta tags.
+- FOR ISSUE 09: the service worker must not cache the hash as part of a page
+  identity, and iOS home-screen apps are exempt from the seven-day storage purge,
+  which is the reason session restore is reliable there at all.
+- NOT VERIFIED IN A BROWSER, and this is the iteration where that matters most.
+  Everything new here is browser glue — localStorage, location.hash, history
+  .replaceState, navigator.share — and none of it has been run. The unit tests cover
+  the codec only, by design. Someone should open the app, adjust a dough, copy the
+  URL into a fresh tab, and confirm the picker is reachable and the session survives
+  a reload. A browser-tool smoke test was attempted this iteration and declined.
+- The codec format is now load-bearing for every link already sent. Positions are the
+  format: append to STYLE_IDS / NUMBERS, never reorder, or bump VERSION.
+- CONTEXT.md has no glossary entry for Session or for the encoded Recipe, though both
+  are now domain vocabulary the code and comments lean on (standards review). Worth a
+  /domain-modeling pass before v1 is called done.
+- Untracked/modified and not mine: .scratch/ralph/ralph-once.sh.
